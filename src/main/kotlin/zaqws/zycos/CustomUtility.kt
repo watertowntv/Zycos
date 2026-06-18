@@ -1,0 +1,1587 @@
+@file:Suppress("unused", "UnstableApiUsage", "FunctionName")
+
+package zaqws.zycos
+
+import io.papermc.paper.block.BlockPredicate
+import io.papermc.paper.datacomponent.DataComponentTypes
+import io.papermc.paper.datacomponent.item.*
+import io.papermc.paper.dialog.Dialog
+import io.papermc.paper.registry.RegistryKey
+import io.papermc.paper.registry.TypedKey
+import io.papermc.paper.registry.data.dialog.ActionButton
+import io.papermc.paper.registry.data.dialog.DialogBase
+import io.papermc.paper.registry.data.dialog.action.DialogAction
+import io.papermc.paper.registry.data.dialog.body.DialogBody
+import io.papermc.paper.registry.data.dialog.type.DialogType
+import io.papermc.paper.registry.set.RegistrySet
+import net.kyori.adventure.text.Component
+import net.kyori.adventure.text.TextComponent
+import net.kyori.adventure.text.event.ClickEvent
+import net.kyori.adventure.text.event.HoverEvent
+import net.kyori.adventure.text.format.NamedTextColor
+import net.kyori.adventure.text.format.TextDecoration
+import net.kyori.adventure.text.minimessage.MiniMessage
+import net.kyori.adventure.title.Title
+import net.kyori.adventure.title.Title.Times
+import org.bukkit.*
+import org.bukkit.attribute.Attribute
+import org.bukkit.block.BlockFace
+import org.bukkit.block.data.BlockData
+import org.bukkit.boss.BarColor
+import org.bukkit.boss.BarStyle
+import org.bukkit.boss.BossBar
+import org.bukkit.enchantments.Enchantment
+import org.bukkit.entity.*
+import org.bukkit.event.entity.PlayerDeathEvent
+import org.bukkit.inventory.Inventory
+import org.bukkit.inventory.ItemStack
+import org.bukkit.inventory.MerchantRecipe
+import org.bukkit.inventory.PlayerInventory
+import org.bukkit.plugin.java.JavaPlugin
+import org.bukkit.potion.PotionEffect
+import org.bukkit.potion.PotionEffectType
+import org.bukkit.util.Transformation
+import org.bukkit.util.Vector
+import org.joml.AxisAngle4f
+import org.joml.Vector3f
+import zaqws.zycos.AreaManager.Position
+import zaqws.zycos.Main.Companion.plugin
+import java.io.File
+import java.security.SecureRandom
+import java.time.Duration
+import kotlin.math.*
+import kotlin.random.Random
+
+
+//region GlobalVariables
+
+val random = Random
+val secureRandom = SecureRandom()
+val overworld: World = Bukkit.getWorlds().first()
+val onlinePlayers: Collection<Player>
+    get() = Bukkit.getOnlinePlayers()
+
+//endregion
+
+
+//region ItemUtility
+
+/**
+ * Creates a named ItemStack
+ *
+ * @param type Material of the item
+ * @param name Name of the item
+ * @param lore Lore of the item
+ * @param enchantments Enchantments of the item
+ * @param amount Amount of the item
+ * @param unbreakable Makes item unbreakable
+ * @param hideEnchantments Hides enchantments
+ * @param hideAttributes Hides attributes
+ * @param hideUnbreakable Hides unbreakable
+ * @param hideTooltip Hides ALL
+ * @return ItemStack
+ */
+fun getNamedItem(
+    type: Material,
+    name: TextComponent? = null,
+    lore: List<TextComponent> = listOf(),
+    amount: Int = 1,
+    enchantments: List<Pair<Enchantment, Int>> = listOf(),
+    unbreakable: Boolean = false,
+    canPlaceOn: List<Material> = listOf(),
+    canBreak: List<Material> = listOf(),
+    maxStackSize: Int? = null,
+    hideTooltip: Boolean = false,
+    hideEnchantments: Boolean = false,
+    hideAttributes: Boolean = false,
+    hideUnbreakable: Boolean = false,
+): ItemStack {
+    val itemStack = ItemStack.of(type, amount).apply {
+        if (name != null) {
+            val nameComponent = name.decoration(TextDecoration.ITALIC, false)
+
+            setData(
+                DataComponentTypes.ITEM_NAME,
+                nameComponent
+            )
+            setData(
+                DataComponentTypes.CUSTOM_NAME,
+                nameComponent
+            )
+        }
+        if (lore.isNotEmpty()) setData(
+            DataComponentTypes.LORE,
+            ItemLore.lore(lore)
+        )
+
+        if (enchantments.isNotEmpty()) setData(
+            DataComponentTypes.ENCHANTMENTS,
+            ItemEnchantments.itemEnchantments(enchantments.toMap())
+        )
+        if (unbreakable) setData(
+            DataComponentTypes.UNBREAKABLE
+        )
+        if (maxStackSize != null) setData(
+            DataComponentTypes.MAX_STACK_SIZE,
+            maxStackSize.clip(1, 99)
+        )
+
+        if (hideEnchantments || hideAttributes || hideUnbreakable || hideTooltip) {
+            val option = TooltipDisplay.tooltipDisplay()
+
+            if (hideEnchantments) option.addHiddenComponents(DataComponentTypes.ENCHANTMENTS)
+            if (hideAttributes) option.addHiddenComponents(DataComponentTypes.ATTRIBUTE_MODIFIERS)
+            if (hideUnbreakable) option.addHiddenComponents(DataComponentTypes.UNBREAKABLE)
+
+            setData(
+                DataComponentTypes.TOOLTIP_DISPLAY,
+                option.hideTooltip(hideTooltip).build()
+            )
+        }
+
+        fun createAdventurePredicate(materials: List<Material>): ItemAdventurePredicate {
+            val typedKeys = materials.map { TypedKey.create(RegistryKey.BLOCK, it.getKey()) }
+            val keySet = RegistrySet.keySet(RegistryKey.BLOCK, typedKeys)
+            val predicate = BlockPredicate.predicate().blocks(keySet).build()
+
+            return ItemAdventurePredicate.itemAdventurePredicate(listOf(predicate))
+        }
+
+        if (canPlaceOn.isNotEmpty()) setData(
+            DataComponentTypes.CAN_PLACE_ON,
+            createAdventurePredicate(canPlaceOn)
+        )
+        if (canBreak.isNotEmpty()) setData(
+            DataComponentTypes.CAN_BREAK,
+            createAdventurePredicate(canBreak)
+        )
+    }
+
+    return itemStack
+}
+
+/**
+ * Creates a named player head
+ *
+ * @param playerName Name of the player
+ * @param name Name of the Item
+ * @param lore Lore of the item
+ * @param amount Amount of the item
+ * @return Player head
+ */
+fun getNamedSkull(
+    playerName: String,
+    name: TextComponent,
+    lore: List<TextComponent> = listOf(),
+    amount: Int = 1
+): ItemStack {
+    val itemStack = ItemStack.of(Material.PLAYER_HEAD, amount).apply {
+        setData(
+            DataComponentTypes.ITEM_NAME,
+            name.decoration(TextDecoration.ITALIC, false)
+        )
+        setData(
+            DataComponentTypes.CUSTOM_NAME,
+            name.decoration(TextDecoration.ITALIC, false)
+        )
+        if (lore.isNotEmpty()) setData(
+            DataComponentTypes.LORE,
+            ItemLore.lore(lore)
+        )
+
+        setData(
+            DataComponentTypes.PROFILE,
+            ResolvableProfile.resolvableProfile().name(playerName).build()
+        )
+    }
+
+    return itemStack
+}
+
+/**
+ * Creates a potion with custom effects
+ *
+ * @param type Effect type of the potion
+ * @param amplifier Amplifier of the potion
+ * @param duration Duration of the potion
+ * @param particle Shows particles of the potion
+ * @param name Name of the potion
+ * @param color Color of the potion
+ * @return Potion with custom effects
+ */
+fun getCustomPotion(
+    type: PotionEffectType,
+    amplifier: Int,
+    duration: Int,
+    particle: Boolean = true,
+    name: TextComponent? = null,
+    color: Color? = null
+) = getCustomPotionImpl(
+    Material.POTION,
+    type,
+    amplifier,
+    duration,
+    particle,
+    name,
+    color
+)
+
+/**
+ * Creates a splash potion with custom effects
+ *
+ * @param type Effect type of the potion
+ * @param amplifier Amplifier of the potion
+ * @param duration Duration of the potion
+ * @param particle Shows particles of the potion
+ * @param name Name of the potion
+ * @param color Color of the potion
+ * @return Splash potion with custom effects
+ */
+fun getCustomSplashPotion(
+    type: PotionEffectType,
+    amplifier: Int,
+    duration: Int,
+    particle: Boolean = true,
+    name: TextComponent? = null,
+    color: Color? = null
+) = getCustomPotionImpl(
+    Material.SPLASH_POTION,
+    type,
+    amplifier,
+    duration,
+    particle,
+    name,
+    color
+)
+
+private fun getCustomPotionImpl(
+    material: Material,
+    type: PotionEffectType,
+    amplifier: Int,
+    duration: Int,
+    particle: Boolean,
+    name: TextComponent?,
+    color: Color?
+): ItemStack {
+    val itemStack = ItemStack.of(material)
+    val effect = PotionEffect(type, duration, amplifier, false, particle)
+    var contents = PotionContents.potionContents().addCustomEffect(effect)
+
+    if (color != null) contents = contents.customColor(color)
+
+    if (name != null) {
+        val nameComponent = name.decoration(TextDecoration.ITALIC, false)
+
+        itemStack.setData(
+            DataComponentTypes.ITEM_NAME,
+            nameComponent
+        )
+        itemStack.setData(
+            DataComponentTypes.CUSTOM_NAME,
+            nameComponent
+        )
+    }
+    itemStack.setData(
+        DataComponentTypes.POTION_CONTENTS,
+        contents.build()
+    )
+
+    return itemStack
+}
+
+/**
+ * Makes item glow
+ *
+ * @return Item with Luck_of_the_Sea enchantment (lvl 1)
+ */
+fun ItemStack.glow(): ItemStack {
+    val enchantments = getData(
+        DataComponentTypes.ENCHANTMENTS
+    ) ?: return this
+    val builder = ItemEnchantments.itemEnchantments()
+        .addAll(enchantments.enchantments())
+        .add(Enchantment.LUCK_OF_THE_SEA, 1)
+
+    setData(
+        DataComponentTypes.ENCHANTMENTS,
+        builder.build()
+    )
+    setData(
+        DataComponentTypes.TOOLTIP_DISPLAY,
+        TooltipDisplay.tooltipDisplay()
+            .addHiddenComponents(DataComponentTypes.ENCHANTMENTS)
+            .build()
+    )
+
+    return this
+}
+
+fun ItemStack.invisible(): ItemStack {
+    setData(
+        DataComponentTypes.ITEM_NAME,
+        Component.text("")
+    )
+    setData(
+        DataComponentTypes.TOOLTIP_DISPLAY,
+        TooltipDisplay.tooltipDisplay()
+            .addHiddenComponents(DataComponentTypes.ENCHANTMENTS)
+            .addHiddenComponents(DataComponentTypes.UNBREAKABLE)
+            .hideTooltip(true)
+            .build()
+    )
+
+    return this
+}
+
+fun MerchantRecipe(
+    ingredient: ItemStack,
+    result: ItemStack
+) = MerchantRecipe(result, Int.MAX_VALUE).apply {
+    addIngredient(ingredient)
+}
+
+fun MerchantRecipe(
+    ingredient1: ItemStack,
+    ingredient2: ItemStack,
+    result: ItemStack
+) = MerchantRecipe(result, Int.MAX_VALUE).apply {
+    addIngredient(ingredient1)
+    addIngredient(ingredient2)
+}
+
+//endregion
+
+
+//region ClientUtility
+
+/**
+ * Sends a global message
+ *
+ * @param message Message to print
+ */
+fun broadcast(message: TextComponent){
+    Bukkit.broadcast(message)
+}
+
+/**
+ * Displays a global title
+ *
+ * @param titleText Title
+ * @param subtitleText Subtitle
+ * @param fadeIn Fade in duration
+ * @param stay Display duration
+ * @param fadeOut Fade out duration
+ */
+fun title(
+    titleText: TextComponent,
+    subtitleText: TextComponent = Component.text(""),
+    fadeIn: Int = 5, stay: Int = 30, fadeOut: Int = 5
+){
+    val title = Title.title(
+        titleText,
+        subtitleText,
+        TitleTimes(fadeIn, stay, fadeOut)
+    )
+
+    onlinePlayers.forEach { p ->
+        p.showTitle(title)
+    }
+}
+
+fun Player.sendTitle(
+    titleText: TextComponent,
+    subtitleText: TextComponent = Component.text(""),
+    fadeIn: Int = 5, stay: Int = 30, fadeOut: Int = 5
+) {
+    val title = Title.title(
+        titleText,
+        subtitleText,
+        TitleTimes(fadeIn, stay, fadeOut)
+    )
+
+    showTitle(title)
+}
+
+fun TitleTimes(fadeIn: Int, stay: Int, fadeOut: Int) = Times.times(
+    Duration.ofMillis(fadeIn * 50L),
+    Duration.ofMillis(stay * 50L),
+    Duration.ofMillis(fadeOut * 50L)
+)
+
+/**
+ * Displays a global actionbar
+ *
+ * @param message Message
+ */
+fun actionbar(message: TextComponent){
+    onlinePlayers.forEach { p ->
+        p.sendActionBar(message)
+    }
+}
+
+/**
+ * Plays a global sound
+ *
+ * @param sound Type of sound
+ * @param volume Volume of the sound
+ * @param pitch Pitch of the sound
+ */
+fun playsound(sound: Sound, volume: Float = 1f, pitch: Float = 1f){
+    onlinePlayers.forEach { p->
+        p.playSound(p.location, sound, SoundCategory.WEATHER, volume, pitch)
+    }
+}
+
+/**
+ * Plays a global sound at location
+ *
+ * @param location Location
+ * @param sound Type of sound
+ * @param volume Volume of the sound
+ * @param pitch Pitch of the sound
+ */
+fun playsound(
+    location: Location,
+    sound: Sound,
+    volume: Float = 1f,
+    pitch: Float = 1f,
+    minVolume: Float = 0f,
+    maxDist: Double = 0.0
+){
+    location.world.playSound(location, sound, SoundCategory.WEATHER, volume, pitch)
+
+    if(minVolume > 0f) plugin.server.onlinePlayers.filter {
+        maxDist == 0.0 || it.location.distanceSquared(location) <= maxDist * maxDist
+    }.forEach { p ->
+        val sourceLocation = p.location.add(
+            location.toVector().subtract(p.location.toVector()).fastNormalize().multiply(5)
+        )
+
+        p.playSound(sourceLocation, sound, SoundCategory.WEATHER, minVolume, pitch)
+    }
+}
+
+/**
+ * Clears message history
+ */
+fun Player.clearMessage() {
+    val empty = text("")
+
+    for(i in 0..100) {
+        sendMessage(empty)
+    }
+}
+
+/**
+ * Returns TextComponent
+ * @param text String message
+ * @param color Text color
+ */
+fun text(text: String = "", color: NamedTextColor = NamedTextColor.WHITE) =
+    Component.text(text, color)
+
+/**
+ * Append TextComponent
+ * @param text String message
+ * @param color Text color
+ */
+fun TextComponent.text(text: String = "", color: NamedTextColor = NamedTextColor.WHITE) =
+    append(Component.text(text, color))
+
+fun TextComponent.hover(hoverText: TextComponent) =
+    hoverEvent(HoverEvent.showText(hoverText))
+
+fun TextComponent.click(callback: (clicked: Player) -> Unit) =
+    clickEvent(ClickEvent.callback { audience ->
+        val player = audience as? Player ?: return@callback
+
+        callback(player)
+    })
+
+fun String.miniMessage() = MiniMessage.miniMessage()
+    .deserialize(this)
+    .decoration(TextDecoration.ITALIC, false) as TextComponent
+
+//endregion
+
+
+//region MathUtility
+
+fun Double.toRadians() = Math.toRadians(this)
+fun Double.toDegrees() = Math.toDegrees(this)
+
+/**
+ * Makes a random number in a range
+ *
+ * @param min Minimum number
+ * @param max Maximum number
+ * @return Random number in a range
+ */
+fun randomRange(min: Int, max: Int) = if(max <= min) min else
+    random.nextInt(max - min + 1) + min
+
+/**
+ * Splits string into list of strings
+ *
+ * @param maxLength Amount of characters until next line break
+ * @return List of strings
+ */
+fun String.splitLines(maxLength: Int = 16): List<String> {
+    val result = mutableListOf<String>()
+    val segment = mutableListOf<String>()
+    var length = 0
+
+    split(' ').forEach { w ->
+        segment.add(w)
+
+        length += w.length + 1
+        if(length > maxLength){
+            length = 0
+
+            result.add(segment.joinToString(" "))
+            segment.clear()
+        }
+    }
+
+    result.add(segment.joinToString(" "))
+
+    return result
+}
+
+/**
+ * Returns amount of exp required for current level
+ *
+ * @param level Level
+ * @return Amount of exp required
+ */
+fun expByLevel(level: Int) = level * (level + 6)
+
+
+/**
+ * Returns only digit characters
+ *
+ * @return Integer
+ */
+fun String.toNumber() = filter(Char::isDigit).toInt()
+
+/**
+ * Capitalizes string
+ *
+ * @return Capitalized string
+ */
+fun String.capitalizeWords() = lowercase()
+    .split(' ')
+    .joinToString(" ") { it.replaceFirstChar { char ->
+        if (char.isLowerCase()) char.titlecase()
+        else char.toString()
+    }}
+
+/**
+ * Generates random UUID-like String
+ *
+ * @return Random UUID-like String
+ */
+fun getRandomString(length: Int): String {
+    val allowedChars = ('A'..'Z') + ('a'..'z') + ('0'..'9')
+
+    return (1..length).map {
+        allowedChars.random()
+    }.joinToString("")
+}
+
+/**
+ * Limits the number
+ *
+ * @param min Minimum number
+ * @param max Maximum number
+ * @return Clipped number
+ */
+fun <T: Comparable<T>> T.clip(min: T, max: T): T {
+    if(this < min) return min
+    if(this > max) return max
+
+    return this
+}
+/**
+ * Divide and modulate two numbers
+ *
+ * @param a Number to be divided and modulated
+ * @param b Number to divide and modulate
+ * @return Pair of divmod
+ */
+fun divmod(a: Int, b: Int) = a / b to a % b
+
+/**
+ * Convert string to minutes and seconds
+ *
+ * @param time Time String ("2:75" = Pair(3, 15))
+ * @return Pair of minutes and seconds
+ */
+fun convertToTime(time: String): Pair<Int, Int> {
+    assert(time.count { it == ':' } == 1)
+
+    val index = time.indexOf(":")
+
+    if (index == -1) {
+        val t = time.toIntOrNull() ?: return -1 to -1
+        return t / 60 to t % 60
+    }
+
+    val (minute, second) = time.split(":").map(String::toInt)
+
+    return minute + second / 60 to second % 60
+}
+
+/**
+ * If true, returns 1
+ * If false, returns -1
+ *
+ * @return 1 or -1
+ */
+fun Boolean.sign() = if(this) 1 else -1
+fun Int.sign() = if(this > 0) 1 else -1
+
+fun Boolean.toInt() = if(this) 1 else 0
+
+/**
+ * Reflects number
+ *
+ * @param c Center
+ * @return Mirrored number
+ */
+fun Double.splitHalf(c: Double) = if(this > c) c * 2 - this else this
+
+
+fun isPrime(n: Int): Boolean {
+    if (n < 2) return false
+    if (n < 4) return true
+    if (n % 2 == 0 || n % 3 == 0) return false
+
+    var i = 5
+    while (i * i <= n) {
+        if (n % i == 0 || n % (i + 2) == 0) return false
+
+        i += 6
+    }
+
+    return true
+}
+
+fun Vector.normalizeWithLength(): Double {
+    val square = (x * x + y * y + z * z).toFloat()
+    if (square == 0f) return 0.0
+
+    val rsqrt = 1.0f / sqrt(square)
+
+    x *= rsqrt
+    y *= rsqrt
+    z *= rsqrt
+
+    return (square * rsqrt).toDouble()
+}
+
+fun Vector.fastNormalize(): Vector {
+    val square = (x * x + y * y + z * z).toFloat()
+    if (square == 0f) return this
+
+    val rsqrt = 1.0f / sqrt(square)
+
+    x *= rsqrt
+    y *= rsqrt
+    z *= rsqrt
+
+    return this
+}
+
+fun <T: Comparable<T>> minmax(a: T, b: T) = if(a < b) a to b else b to a
+
+//endregion
+
+
+//region EntityUtility
+
+/**
+ * Returns the nearest living entity
+ *
+ * @param range Range
+ * @return Nearest LivingEntity or null if not found
+ */
+fun LivingEntity.getNearestEntity(range: Double): Entity? =
+    location.getNearbyLivingEntities(range)
+        .asSequence()
+        .filter {
+            it !== this && this !in it.passengers
+        }.minBy {
+            location.distanceSquared(it.location)
+        }
+
+/**
+ * Launches an arrow
+ *
+ * @param location Location
+ * @param vector Direction
+ * @param entity Shooter
+ * @param speed Speed
+ * @param spread Spread
+ * @return Arrow
+ */
+fun launchArrow(
+    location: Location,
+    vector: Vector = location.direction,
+    entity: LivingEntity? = null,
+    speed: Float = 3f,
+    spread: Float = 0.5f
+) = location.world.spawnArrow(location, vector, speed, spread).apply {
+    shooter = entity
+
+    playsound(location, Sound.ENTITY_ARROW_SHOOT)
+}
+
+/**
+ * Add a potion effect to entity
+ *
+ * @param effect Type of potion effect
+ * @param amplifier Amplifier of the potion effect
+ * @param duration Duration of the potion effect
+ * @param particle Shows particle
+ */
+fun LivingEntity.addPotion(
+    effect: PotionEffectType,
+    amplifier: Int, 
+    duration: Int, 
+    particle: Boolean = false
+) {
+    addPotionEffect(PotionEffect(
+        effect,
+        duration,
+        amplifier,
+        particle,
+        particle
+    ))
+}
+
+/**
+ * Plays particle effects
+ *
+ * @param type Type of particle effects
+ * @param amount Amount of particles
+ * @param speed Speed of particles
+ * @param range Range of particles
+ * @param data Data of particles
+ */
+fun Location.spawnParticle(type: Particle, amount: Int, speed: Double, range: Double, data: Any? = null){
+    world.spawnParticle(
+        type,
+        this,
+        amount,
+        range, range, range,
+        speed,
+        data,
+        true
+    )
+}
+
+/**
+ * If player is survival or adventure, returns true
+ */
+val Player.isDamageable
+    get() = gameMode == GameMode.SURVIVAL || gameMode == GameMode.ADVENTURE
+
+@Suppress("DEPRECATION")
+val Player.onGround: Boolean
+    get() = isOnGround
+
+/**
+ * Returns the nearest player
+ *
+ * @param excepts Filter
+ * @return Nearest player
+ */
+fun Location.getNearestPlayer(
+    excepts: List<Player> = listOf()
+) = world.players
+    .asSequence()
+    .filter {
+        it !in excepts && it.gameMode != GameMode.SPECTATOR
+    }.minByOrNull {
+        distanceSquared(it.location)
+    }
+
+/**
+ * Returns the nearest living entity
+ *
+ * @param excepts Filter
+ * @param exceptTypes Filter Entity Type
+ * @return Nearest living entity
+ */
+fun LivingEntity.getNearestLivingEntity(
+    excepts: List<LivingEntity> = listOf(),
+    exceptTypes: List<EntityType> = listOf()
+) = world.entities.asSequence()
+    .filterIsInstance<LivingEntity>()
+    .filter {
+        it !== this && it !in excepts && it.type !in exceptTypes
+    }.minByOrNull {
+        location.distanceSquared(it.location)
+    }
+
+/**
+ * Plays firework effect
+ *
+ * @param location Location
+ * @param effect Firework effect
+ * @param pw Power
+ */
+fun World.playFirework(
+    location: Location,
+    effect: FireworkEffect,
+    pw: Int = 0
+) = spawn(location, Firework::class.java).apply {
+    fireworkMeta = fireworkMeta.apply {
+        if(pw > 0) power = pw - 1
+
+        addEffect(effect)
+    }
+
+    if(pw == 0) detonate()
+}
+
+/**
+ * Remove specific amount of material from inventory
+ *
+ * @param type Material
+ * @param count Amount to remove
+ */
+fun Inventory.removeMaterial(type: Material, count: Int) {
+    var remaining = count
+
+    for(i in size - 1 downTo 0){
+        val item = getItem(i) ?: continue
+        if (item.type != type) continue
+
+        val new = max(0, item.amount - remaining)
+        remaining -= item.amount
+        item.amount = new
+
+        if(remaining <= 0) break
+    }
+}
+
+/**
+ * Returns the amount of material in an inventory\
+ *
+ * @param type Material
+ * @return Amount of material
+ */
+fun Inventory.countMaterial(type: Material) = contents.sumOf {
+    if(it?.type == type) it.amount else 0
+}
+
+fun Inventory.fill(itemStack: ItemStack) {
+    contents = Array(size) { itemStack }
+}
+
+/**
+ * Fills only empty slots, then returns slots already existing
+ * @param itemStack: Item to fill
+ * @return Slots not Empty
+ */
+fun Inventory.fillEmpty(itemStack: ItemStack): List<Int> {
+    val notEmpty = arrayListOf<Int>()
+
+    for (i in 0 until size) {
+        if (getItem(i) == null) setItem(i, itemStack)
+        else notEmpty.add(i)
+    }
+
+    return notEmpty
+}
+
+fun PlayerInventory.addItem(itemStack: ItemStack, silent: Boolean): Int {
+    if(!silent) {
+        addItem(itemStack)
+        return -1
+    }
+
+    for(i in 0 until size) getItem(i)?.let { item ->
+        if(i == heldItemSlot) continue
+
+        setItem(i, itemStack)
+
+        (holder as Player).let { p ->
+            p.playSound(p.location, Sound.ENTITY_ITEM_PICKUP, 1f, 1f)
+        }
+
+        return i
+    }
+
+    return -1
+}
+
+
+/**
+ * Updates pivot point of Display
+ *
+ * @param size Size of the display (Vector3f)
+ */
+fun Display.updatePivot(size: Vector3f = transformation.scale){
+    interpolationDelay = -1
+    interpolationDuration = -1
+
+    transformation = Transformation(
+        Vector3f(
+            -size.x * 0.5f,
+            -size.y * 0.5f,
+            -size.z * 0.5f
+        ),
+        transformation.leftRotation,
+        size,
+        transformation.rightRotation
+    )
+}
+
+/**
+ * Spawns Block Display
+ *
+ * @param location Spawn location
+ * @param type Material
+ * @param size Size of the display (Vector)
+ * @return BlockDisplay
+ */
+fun World.spawnBlockDisplay(
+    location: Location,
+    type: Material,
+    size: Vector = Vector(1, 1, 1)
+) = spawnBlockDisplay(location, type.createBlockData(), size)
+
+/**
+ * Spawns Block Display
+ *
+ * @param location Spawn location
+ * @param data BlockData
+ * @param size Size of the display (Vector)
+ * @return BlockDisplay
+ */
+fun World.spawnBlockDisplay(
+    location: Location,
+    data: BlockData,
+    size: Vector = Vector(1, 1, 1)
+) = spawn(location, BlockDisplay::class.java).apply {
+    updatePivot(size.toFloat())
+    teleport(location)
+    block = data
+}
+
+
+/**
+ * Reset attributes
+ */
+fun Player.resetAttributes(){
+    getAttribute(Attribute.ARMOR)?.baseValue = 0.0
+    getAttribute(Attribute.ARMOR_TOUGHNESS)?.baseValue = 0.0
+
+    getAttribute(Attribute.ATTACK_DAMAGE)?.baseValue = 1.0
+    getAttribute(Attribute.ATTACK_KNOCKBACK)?.baseValue = 0.0
+    getAttribute(Attribute.ATTACK_SPEED)?.baseValue = 4.0
+
+    getAttribute(Attribute.BLOCK_INTERACTION_RANGE)?.baseValue = 4.5
+    getAttribute(Attribute.ENTITY_INTERACTION_RANGE)?.baseValue = 3.0
+
+    getAttribute(Attribute.MOVEMENT_SPEED)?.baseValue = 0.1  // 0.10000000149011612
+    getAttribute(Attribute.JUMP_STRENGTH)?.baseValue = 0.42  // 0.41999998688697815
+    getAttribute(Attribute.SNEAKING_SPEED)?.baseValue = 0.3
+    getAttribute(Attribute.GRAVITY)?.baseValue = 0.08
+
+    getAttribute(Attribute.BLOCK_BREAK_SPEED)?.baseValue = 1.0
+
+    getAttribute(Attribute.BURNING_TIME)?.baseValue = 1.0
+    getAttribute(Attribute.OXYGEN_BONUS)?.baseValue = 0.0
+    getAttribute(Attribute.MAX_ABSORPTION)?.baseValue = 0.0
+    getAttribute(Attribute.MAX_HEALTH)?.baseValue = 20.0
+
+    getAttribute(Attribute.SCALE)?.baseValue = 1.0
+    getAttribute(Attribute.CAMERA_DISTANCE)?.baseValue = 4.0
+    getAttribute(Attribute.STEP_HEIGHT)?.baseValue = 0.6
+    getAttribute(Attribute.LUCK)?.baseValue = 0.0
+    getAttribute(Attribute.SAFE_FALL_DISTANCE)?.baseValue = 3.0
+
+    getAttribute(Attribute.MINING_EFFICIENCY)?.baseValue = 0.0
+    getAttribute(Attribute.MOVEMENT_EFFICIENCY)?.baseValue = 0.0
+    getAttribute(Attribute.WATER_MOVEMENT_EFFICIENCY)?.baseValue = 0.0
+
+    getAttribute(Attribute.EXPLOSION_KNOCKBACK_RESISTANCE)?.baseValue = 0.0
+    getAttribute(Attribute.KNOCKBACK_RESISTANCE)?.baseValue = 0.0
+    getAttribute(Attribute.FALL_DAMAGE_MULTIPLIER)?.baseValue = 1.0
+    getAttribute(Attribute.SWEEPING_DAMAGE_RATIO)?.baseValue = 0.0
+}
+
+fun Entity.hideExcept(player: Player) {
+    plugin.server.onlinePlayers.filter {
+        it.uniqueId != player.uniqueId
+    }.forEach { p ->
+        p.hideEntity(plugin, this)
+    }
+}
+
+var LivingEntity.maximumHealth: Double
+    set(hp) {
+        getAttribute(Attribute.MAX_HEALTH)?.let {
+            it.baseValue = hp
+
+            if (this.health > hp) this.health = hp
+        }
+    }
+    get() = getAttribute(Attribute.MAX_HEALTH)?.baseValue ?: 0.0
+
+val LivingEntity.attackDamage: Double
+    get() = getAttribute(Attribute.ATTACK_DAMAGE)?.value ?: 0.0
+
+val LivingEntity.attackSpeed: Double
+    get() = getAttribute(Attribute.ATTACK_SPEED)?.value ?: 0.0
+
+val LivingEntity.attackRange: Double
+    get() = getAttribute(Attribute.ENTITY_INTERACTION_RANGE)?.value ?: 0.0
+
+//endregion
+
+
+//region LocationUtility
+
+fun Location.toEntityLocation() = clone().toBlockLocation().add(0.5,0.0,0.5)
+
+fun Location.toGround(filter: List<Material> = listOf()): Location {
+    val location = clone()
+
+    while((location.block.type.isAir || location.block.isPassable) || location.block.type in filter){
+        if (location.y <= -64) break
+
+        location.y -= 1
+    }
+    while(!(location.block.type.isAir || location.block.isPassable) || location.block.type in filter){
+        if (location.y >= 312) break
+
+        location.y += 1
+    }
+
+    return location
+}
+
+fun Location.distance2D(target: Location): Double {
+    val dx = target.x - x
+    val dz = target.z - z
+
+    return sqrt(dx * dx + dz * dz)
+}
+fun Location.distanceSquared2D(target: Location): Double {
+    val dx = target.x - x
+    val dz = target.z - z
+
+    return dx * dx + dz * dz
+}
+
+fun Vector.clip(n: Double): Vector {
+    x = if(n > 0) min(x, n) else max(x, n)
+    y = if(n > 0) min(y, n) else max(y, n)
+    z = if(n > 0) min(z, n) else max(z, n)
+
+    return this
+}
+
+fun Vector.sign(n: Double = 1.0): Vector {
+    val e = Vector.getEpsilon()
+
+    x = if(x > e) n else if(x < e) -n else 0.0
+    y = if(y > e) n else if(y < e) -n else 0.0
+    z = if(z > e) n else if(z < e) -n else 0.0
+
+    return this
+}
+
+fun Vector.reflect(n: Vector) =
+    subtract(clone().multiply(n).multiply(n).multiply(2.0))
+
+fun getSurfaceVector(face: BlockFace) = when(face){
+    BlockFace.EAST -> Vector(1.0, 0.0, 0.0)
+    BlockFace.WEST -> Vector(-1.0, 0.0, 0.0)
+    BlockFace.NORTH -> Vector(0.0, 0.0, -1.0)
+    BlockFace.SOUTH -> Vector(0.0, 0.0, 1.0)
+    BlockFace.UP -> Vector(0.0, 1.0, 0.0)
+    BlockFace.DOWN -> Vector(0.0, -1.0, 0.0)
+
+    else -> Vector(0.0, 0.0, 0.0)
+}
+
+fun Vector.abs(): Vector {
+    x = x.absoluteValue
+    y = y.absoluteValue
+    z = z.absoluteValue
+
+    return this
+}
+
+fun Vector.sum() = x + y + z
+
+operator fun Vector.times(n: Double) = Vector(x * n, y * n, z * n)
+operator fun Vector.div(n: Double) = Vector(x / n, y / n, z / n)
+
+fun Location.lookAt(to: Location): Location {
+    direction = to.clone().subtract(this).toVector()
+
+    return this
+}
+
+fun Location.directionTo(to: Location) = to.clone().subtract(this).toVector()
+
+fun Location.wiggleOrientation(yawAmplitude: Float, pitchAmplitude: Float): Location {
+    this.yaw += random.nextFloat() * abs(yawAmplitude) * 2 - abs(yawAmplitude)
+    this.pitch += random.nextFloat() * abs(pitchAmplitude) * 2 - abs(pitchAmplitude)
+
+    return this
+}
+
+fun Location.clone(target: Location): Location {
+    this.world = target.world
+
+    this.x = target.x
+    this.y = target.y
+    this.z = target.z
+
+    this.yaw = target.yaw
+    this.pitch = target.pitch
+
+    return this
+}
+
+/**
+ * For 1.19.4 Vector3f
+ *
+ * @return Vector3f
+ */
+fun Vector.toFloat() = Vector3f(x.toFloat(), y.toFloat(), z.toFloat())
+
+/**
+ * Direction to yaw and pitch
+ * @return yaw to pitch
+ */
+fun Vector.toYawPitch(): Pair<Float, Float> {
+    val epsilon = Vector.getEpsilon()
+    val doublePI = Math.PI * 2
+
+    if (x.absoluteValue < epsilon && z.absoluteValue < epsilon) {
+        return 0f to (if (y > 0) -90f else 90f)
+    }
+
+    val theta = atan2(-x, z)
+    val xz = sqrt(x * x + z * z)
+
+    val yaw = (theta + doublePI) % doublePI
+    val pitch = atan(-y / xz)
+
+    return yaw.toFloat() to pitch.toFloat()
+}
+
+fun getDirection(yaw: Float, pitch: Float): Vector {
+    val xz = cos(pitch)
+
+    return Vector(
+        -xz * sin(yaw),
+        -sin(pitch),
+        xz * cos(yaw)
+    )
+}
+
+fun Location.getRightVector(): Vector {
+    val x = cos(yaw.toDouble().toRadians())
+    val z = sin(yaw.toDouble().toRadians())
+
+    return Vector(-x, 0.0, -z).fastNormalize()
+}
+
+fun Location.getUpVector(): Vector {
+    val xz = getDirection()
+    val right = getRightVector()
+
+    return xz.crossProduct(right).multiply(-1).fastNormalize()
+}
+
+/**
+ * Trace
+ *
+ * @param start Start Location
+ * @param end End Location
+ * @param interval Gap between iteration
+ * @param callback Callback(World, Double, Double, Double)
+ *
+ * @throws IllegalArgumentException If interval is not in range 0..1
+ */
+fun trace(
+    start: Location,
+    end: Location,
+    interval: Double = 0.05,
+    callback: (world: World, x: Double, y: Double, z: Double) -> Unit
+){
+    if(interval <= 0.0 || 1.0 < interval)
+        throw IllegalArgumentException("Interval must be 0 < x <= 1")
+
+    val world = start.world
+    val startX = start.x
+    val startY = start.y
+    val startZ = start.z
+
+    val dx = (end.x - start.x) * interval
+    val dy = (end.y - start.y) * interval
+    val dz = (end.z - start.z) * interval
+
+    for(i in 0 until (1 / interval).toInt() + 1)
+        callback(
+            world,
+            startX + dx * i,
+            startY + dy * i,
+            startZ + dz * i
+        )
+}
+
+//endregion
+
+
+//region ArrayUtility
+
+/**
+ * Iterate an array list
+ */
+fun <T> Iterable<T>.iterEach(value: (element: T) -> Unit) =
+    toList().forEach(value)
+
+/**
+ * Iterate an array list (Includes null)
+ */
+fun <T> Iterable<T?>.iterEachOrNull(value: (element: T?) -> Unit) =
+    toList().forEach(value)
+
+/**
+ * Add varargs to MutableList
+ */
+fun <T> MutableList<T>.merge(vararg values: T) {
+    values.forEach(this::add)
+}
+
+/**
+ * Returns a copy of an array list
+ */
+fun <T> MutableList<T>.copy() = toMutableList()
+
+fun <T> Iterable<T>.random(exclude: Iterable<T>) =
+    filter { it !in exclude }.random()
+
+/**
+ * Returns specific number of random elements from an array list
+ *
+ * @param n Amount of elements to pick from
+ * @return MutableList of random elements
+ */
+fun <T> MutableList<T>.randomBatch(n: Int) =
+    mutableListOf(shuffled().slice(0 until n))
+
+/**
+ * Returns a flattened array of matrix values from hash map
+ *
+ * @param filter Filters
+ * @return Array of flattened values
+ */
+fun <T, V> HashMap<V, Iterable<T>>.flattenValue(filter: List<V> = listOf()): MutableList<T>{
+    val list = mutableListOf<T>()
+
+    keys.filter { it !in filter }.forEach { list.addAll(this[it]!!) }
+
+    return list
+}
+
+fun <T> List<T>.randomMatch(): List<Pair<T, T>> {
+    val list = shuffled()
+
+    return list.mapIndexed { i, t -> t to list[(i + 1) % size] }
+}
+
+fun <T> MutableList<T>.insert(value: T): MutableList<T> {
+    add(value)
+
+    return this
+}
+
+fun <T> MutableList<T>.insert(index: Int, value: T): MutableList<T> {
+    add(index, value)
+
+    return this
+}
+
+fun <T> MutableList<T>.insertAll(vararg values: T): MutableList<T> {
+    addAll(values)
+
+    return this
+}
+
+fun <T> MutableList<T>.insertAll(values: Iterable<T>): MutableList<T> {
+    addAll(values)
+
+    return this
+}
+
+inline fun <T, R : Comparable<R>> Iterable<T>.maxsBy(selector: (T) -> R): List<T> {
+    val iterator = iterator()
+    if (!iterator.hasNext()) return emptyList()
+
+    val result = mutableListOf<T>()
+    val maxElem = iterator.next()
+    var maxValue = selector(maxElem)
+
+    result.add(maxElem)
+
+    while (iterator.hasNext()) {
+        val element = iterator.next()
+        val value = selector(element)
+
+        if (value > maxValue) {
+            maxValue = value
+
+            result.clear()
+            result.add(element)
+        } else if (value == maxValue) {
+            result.add(element)
+        }
+    }
+
+    return result
+}
+
+inline fun <T, R : Comparable<R>> Iterable<T>.minsBy(selector: (T) -> R): List<T> {
+    val iterator = iterator()
+    if (!iterator.hasNext()) return emptyList()
+
+    val result = mutableListOf<T>()
+    val minElem = iterator.next()
+    var minValue = selector(minElem)
+
+    result.add(minElem)
+
+    while (iterator.hasNext()) {
+        val element = iterator.next()
+        val value = selector(element)
+
+        if (value < minValue) {
+            minValue = value
+
+            result.clear()
+            result.add(element)
+        } else if (value == minValue) {
+            result.add(element)
+        }
+    }
+
+    return result
+}
+
+
+inline fun <T> List<T>.fastForEach(action: (T) -> Unit) {
+    for (i in 0..lastIndex) {
+        action(this[i])
+    }
+}
+
+inline fun <T> List<T>.fastForEachIndexed(action: (index: Int, T) -> Unit) {
+    for (i in 0..lastIndex) {
+        action(i, this[i])
+    }
+}
+
+inline fun <T> List<T>.fastForEachReversed(action: (T) -> Unit) {
+    for (i in lastIndex downTo 0) {
+        action(this[i])
+    }
+}
+
+inline fun <T> List<T>.fastFirstOrNull(predicate: (T) -> Boolean): T? {
+    for (i in 0..lastIndex) {
+        val item = this[i]
+
+        if (predicate(item)) return item
+    }
+
+    return null
+}
+
+inline fun <T> List<T>.fastAny(predicate: (T) -> Boolean): Boolean {
+    for (i in 0..lastIndex) {
+        if (predicate(this[i])) return true
+    }
+
+    return false
+}
+
+inline fun <T> MutableList<T>.fastRemoveIf(predicate: (T) -> Boolean) {
+    var writeIndex = 0
+
+    for (readIndex in 0..lastIndex) {
+        val element = this[readIndex]
+        if (predicate(element)) continue
+
+        if (writeIndex != readIndex)
+            this[writeIndex] = element
+
+        writeIndex++
+    }
+
+    while (lastIndex >= writeIndex) removeAt(lastIndex)
+}
+
+//endregion
+
+
+//region Event
+
+fun PlayerDeathEvent.cancel() {
+    isCancelled = true
+    deathMessage()?.let(Bukkit::broadcast)
+}
+
+//endregion
+
+
+//region NotUsed
+
+fun Display.animate(
+    tick: Int,
+    position: Vector,
+    rotation: Vector = Vector(0, 0, 0),
+    scale: Vector = Vector(1, 1, 1)
+){
+    val axis = AxisAngle4f(Math.PI.toFloat(), rotation.toFloat())
+
+    interpolationDuration = tick
+    transformation = Transformation(
+        position.toFloat(),
+        axis,
+        scale.toFloat(),
+        axis,
+    )
+}
+
+//endregion
+
+
+//region Config
+
+fun createConfigFile(instance: JavaPlugin): Boolean {
+    val file = File(
+        instance.dataFolder.toString() + File.separator + "config.yml"
+    )
+
+    if (!file.exists() || instance.config[instance.pluginMeta.name] == null) instance.config.apply {
+        addDefault(
+            instance.pluginMeta.name,
+            "by ${instance.pluginMeta.authors.joinToString(", ")}"
+        )
+        options().copyDefaults(true)
+        instance.saveConfig()
+
+        return true
+    }
+
+    return false
+}
+
+//endregion
+
+
+//region Dialog
+
+fun NoticeDialog(
+    title: TextComponent,
+    body: Iterable<TextComponent>
+): Dialog = Dialog.create { builder ->
+    builder.empty().base(
+        DialogBase.builder(title)
+            .body(body.map(DialogBody::plainMessage))
+            .build()
+    ).type(DialogType.notice())
+}
+
+fun MultiDialog(
+    title: TextComponent,
+    body: Iterable<TextComponent>,
+    dialogs: Iterable<Dialog>
+): Dialog = Dialog.create { builder ->
+    builder.empty().base(
+        DialogBase.builder(title)
+            .body(body.map(DialogBody::plainMessage))
+            .build()
+    ).type(DialogType.dialogList(RegistrySet.valueSet(
+        RegistryKey.DIALOG,
+        dialogs
+    )).build())
+}
+
+fun ActionDialog(
+    title: TextComponent,
+    body: Iterable<TextComponent>,
+    actions: Iterable<ActionButtonData>
+): Dialog = Dialog.create { builder ->
+    builder.empty().base(
+        DialogBase.builder(title)
+            .body(body.map(DialogBody::plainMessage))
+            .build()
+    ).type(DialogType.multiAction(
+        actions.map { action ->
+            ActionButton.builder(action.name)
+                .action(DialogAction.staticAction(
+                    ClickEvent.callback { audience ->
+                        if(audience !is Player) return@callback
+
+                        action.callback(audience)
+                    }
+                )).build()
+        }
+    ).build())
+}
+
+data class ActionButtonData(
+    val name: TextComponent,
+    val callback: (Player) -> Unit
+)
+
+//endregion
+
+
+//region Zycos
+
+fun simpleTimer(name: String, tick: Int, callback: () -> Unit): BossBar {
+    val bossBar = Bukkit.createBossBar(name, BarColor.GREEN, BarStyle.SOLID).apply {
+        isVisible = true
+        progress = 1.0
+    }
+
+    loop(tick) { i, _ ->
+        bossBar.progress = (1.0 - i.toDouble() / tick).clip(0.0, 1.0)
+    }
+
+    later(tick) {
+        bossBar.removeAll()
+        callback()
+    }
+
+    return bossBar
+}
+
+fun Location.toPosition() = Position(blockX, blockY, blockZ)
+fun Vector.toPosition() = Position(blockX, blockY, blockZ)
+fun AreaManager.Area.toList() = listOf(
+    boundingBoxStart.x, boundingBoxStart.y, boundingBoxStart.z,
+    boundingBoxEnd.x, boundingBoxEnd.y, boundingBoxEnd.z
+)
+
+fun <T : Comparable<T>> binaryListOf() =
+    BinaryList(emptyList<T>(), compareBy { it })
+
+fun <T : Comparable<T>> binaryListOf(vararg elements: T) =
+    BinaryList(elements.toMutableList(), compareBy { it })
+
+//endregion

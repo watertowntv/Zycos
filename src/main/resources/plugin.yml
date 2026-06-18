@@ -1,0 +1,6 @@
+main: zaqws.zycos.Main
+name: Zycos
+version: 1.0
+depend: [ Kotlin ]
+api-version: '26.1.2'
+author: 5zaqws
