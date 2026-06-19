@@ -4,6 +4,8 @@ package zaqws.zycos
 
 import it.unimi.dsi.fastutil.longs.Long2DoubleOpenHashMap
 import it.unimi.dsi.fastutil.longs.Long2LongOpenHashMap
+import it.unimi.dsi.fastutil.longs.Long2ObjectMap
+import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -94,7 +96,7 @@ class PathfindingManager {
         }
 
         private fun cleanOrphanEdges(targetChunkX: Int, targetChunkZ: Int) {
-            for (dx in -1..1) {
+            for (dx in -1..1)
                 for (dz in -1..1) {
                     if (dx == 0 && dz == 0) continue
                     val neighborKey = getChunkKey(targetChunkX + dx, targetChunkZ + dz)
@@ -120,33 +122,48 @@ class PathfindingManager {
                     }
 
                     if (deadEntranceIds.isEmpty()) continue
-
-                    neighborEntranceIds.fastRemoveIf { it in deadEntranceIds }
+                    neighborEntranceIds.fastRemoveIf {
+                        it in deadEntranceIds
+                    }
 
                     for (index in neighborEntranceIds.indices) {
                         val siblingEntrance = entrances[neighborEntranceIds[index]] ?: continue
-                        siblingEntrance.intraEdges.fastRemoveIf { it.targetEntranceId in deadEntranceIds }
+
+                        siblingEntrance.intraEdges.fastRemoveIf {
+                            it.targetEntranceId in deadEntranceIds
+                        }
                     }
                 }
-            }
         }
 
         private fun isBelongToChunk(entranceId: Long, chunkX: Int, chunkZ: Int): Boolean {
-            val position = AreaManager.Position(entranceId)
+            val cX = (entranceId shr 42).toInt()
+            val cZ = (entranceId shl 26 shr 42).toInt()
 
-            return position.chunkX == chunkX && position.chunkZ == chunkZ
+            return cX == chunkX && cZ == chunkZ
         }
     }
 
 
     class LocalPathfinder(
-        private val chunkSnapshots: Map<Long, ChunkSnapshot>,
+        var chunkSnapshots: Long2ObjectMap<ChunkSnapshot>,
         private val limitToCurrentChunk: Boolean = false,
         private val mobHeight: Int = 2,
         private val mobWidth: Double = 0.6
     ) {
         private val deltaXOffsets = intArrayOf(1, -1, 0, 0, 1, 1, -1, -1)
         private val deltaZOffsets = intArrayOf(0, 0, 1, -1, 1, -1, 1, -1)
+
+        private val openSet = PriorityQueue<PathNode>()
+        private val accumulatedCostMap = Long2DoubleOpenHashMap().apply {
+            defaultReturnValue(Double.MAX_VALUE)
+        }
+        private val navigationParentMap = Long2LongOpenHashMap().apply {
+            defaultReturnValue(-1L)
+        }
+
+        private var lastChunkKey = -1L
+        private var lastSnapshot: ChunkSnapshot? = null
 
 
         private class PathNode(
@@ -161,13 +178,12 @@ class PathfindingManager {
             if (start.raw == end.raw) return longArrayOf(start.raw)
             if (end !in area) return LongArray(0)
 
-            val openSet = PriorityQueue<PathNode>()
-            val accumulatedCostMap = Long2DoubleOpenHashMap().apply {
-                defaultReturnValue(Double.MAX_VALUE)
-            }
-            val navigationParentMap = Long2LongOpenHashMap().apply {
-                defaultReturnValue(-1L)
-            }
+            openSet.clear()
+            accumulatedCostMap.clear()
+            navigationParentMap.clear()
+
+            lastChunkKey = -1L
+            lastSnapshot = null
 
             accumulatedCostMap[start.raw] = 0.0
             openSet.add(
@@ -259,7 +275,14 @@ class PathfindingManager {
             val chunkZ = globalZ shr 4
 
             val chunkKey = (chunkX.toLong() shl 32) or (chunkZ.toLong() and 0xFFFFFFFFL)
-            val snapshot = chunkSnapshots[chunkKey] ?: return Material.AIR
+            var snapshot = lastSnapshot
+
+            if (chunkKey != lastChunkKey) {
+                snapshot = chunkSnapshots.get(chunkKey)
+                lastChunkKey = chunkKey
+                lastSnapshot = snapshot
+            }
+            if (snapshot == null) return Material.AIR
 
             return snapshot.getBlockType(globalX and 15, globalY, globalZ and 15)
         }
@@ -318,8 +341,8 @@ class PathfindingManager {
         }
 
 
-        fun captureAreaSnapshots(world: World, area: AreaManager.Area): Map<Long, ChunkSnapshot> {
-            val snapshots = HashMap<Long, ChunkSnapshot>()
+        fun captureAreaSnapshots(world: World, area: AreaManager.Area): Long2ObjectMap<ChunkSnapshot> {
+            val snapshots = Long2ObjectOpenHashMap<ChunkSnapshot>()
 
             val minChunkX = area.boundingBoxStart.chunkX
             val maxChunkX = area.boundingBoxEnd.chunkX
@@ -336,8 +359,8 @@ class PathfindingManager {
             return snapshots
         }
 
-        fun captureNeighborSnapshots(world: World, centerChunkX: Int, centerChunkZ: Int): Map<Long, ChunkSnapshot> {
-            val snapshots = HashMap<Long, ChunkSnapshot>()
+        fun captureNeighborSnapshots(world: World, centerChunkX: Int, centerChunkZ: Int): Long2ObjectMap<ChunkSnapshot> {
+            val snapshots = Long2ObjectOpenHashMap<ChunkSnapshot>()
 
             for (deltaX in -1..1)
                 for (deltaZ in -1..1) {
@@ -353,7 +376,7 @@ class PathfindingManager {
 
         suspend fun bakeAll(
             hierarchicalGrid: HierarchicalGrid,
-            chunkSnapshots: Map<Long, ChunkSnapshot>
+            chunkSnapshots: Long2ObjectMap<ChunkSnapshot>
         ) = withContext(Dispatchers.Default) {
             hierarchicalGrid.hierarchicalLock.writeLock().lock()
 
@@ -431,7 +454,7 @@ class PathfindingManager {
         }
 
         private fun scanChunkBorders(
-            grid: HierarchicalGrid, chunkX: Int, chunkZ: Int, snapshots: Map<Long, ChunkSnapshot>
+            grid: HierarchicalGrid, chunkX: Int, chunkZ: Int, snapshots: Long2ObjectMap<ChunkSnapshot>
         ) {
             val currentCluster = grid.getOrCreateCluster(chunkX, chunkZ)
             val borderStartX = chunkX shl 4
@@ -462,7 +485,7 @@ class PathfindingManager {
         private fun scanSingleAxis(
             grid: HierarchicalGrid,
             currentCluster: Cluster,
-            snapshots: Map<Long, ChunkSnapshot>,
+            snapshots: Long2ObjectMap<ChunkSnapshot>,
             targetChunkX: Int,
             targetChunkZ: Int,
             isEastAxis: Boolean,
@@ -530,16 +553,16 @@ class PathfindingManager {
             }
         }
 
-        private fun getBlockMaterial(snapshots: Map<Long, ChunkSnapshot>, globalX: Int, globalY: Int, globalZ: Int): Material {
+        private fun getBlockMaterial(snapshots: Long2ObjectMap<ChunkSnapshot>, globalX: Int, globalY: Int, globalZ: Int): Material {
             if (globalY < -64 || globalY > 319) return Material.AIR
 
             val chunkKey = getChunkKey(globalX shr 4, globalZ shr 4)
-            val snapshot = snapshots[chunkKey] ?: return Material.AIR
+            val snapshot = snapshots.get(chunkKey) ?: return Material.AIR
 
             return snapshot.getBlockType(globalX and 15, globalY, globalZ and 15)
         }
 
-        private fun isPositionWalkable(snapshots: Map<Long, ChunkSnapshot>, position: AreaManager.Position): Boolean =
+        private fun isPositionWalkable(snapshots: Long2ObjectMap<ChunkSnapshot>, position: AreaManager.Position): Boolean =
             !getBlockMaterial(snapshots, position.x, position.y, position.z).isSolid &&
                     !getBlockMaterial(snapshots, position.x, position.y + 1, position.z).isSolid &&
                     getBlockMaterial(snapshots, position.x, position.y - 1, position.z).isSolid
@@ -555,11 +578,18 @@ class PathfindingManager {
                 estimatedTotalCost.compareTo(other.estimatedTotalCost)
         }
 
+        private val accumulatedCostMap = Long2DoubleOpenHashMap().apply {
+            defaultReturnValue(Double.MAX_VALUE)
+        }
+        private val navigationParentMap = Long2LongOpenHashMap().apply {
+            defaultReturnValue(-1L)
+        }
+
         suspend fun findHierarchicalPath(
             source: AreaManager.Position,
             target: AreaManager.Position,
             grid: HierarchicalGrid,
-            chunkSnapshots: Map<Long, ChunkSnapshot>
+            chunkSnapshots: Long2ObjectMap<ChunkSnapshot>
         ): LongArray = withContext(Dispatchers.Default) {
             if (source.raw == target.raw) return@withContext longArrayOf(source.raw)
             if (target !in grid.area) return@withContext LongArray(0)
@@ -573,8 +603,9 @@ class PathfindingManager {
             grid.hierarchicalLock.readLock().lock()
             try {
                 val openSet = PriorityQueue<MacroPathNode>()
-                val accumulatedCostMap = HashMap<Long, Double>()
-                val navigationParentMap = HashMap<Long, Long>()
+
+                accumulatedCostMap.clear()
+                navigationParentMap.clear()
 
                 accumulatedCostMap[source.raw] = 0.0
                 openSet.add(
@@ -589,7 +620,7 @@ class PathfindingManager {
                     if (currentPositionRaw == target.raw)
                         return@withContext reconstructMacroPath(navigationParentMap, target.raw)
 
-                    val currentAccumulatedCost = accumulatedCostMap[currentPositionRaw] ?: Double.MAX_VALUE
+                    val currentAccumulatedCost = accumulatedCostMap.get(currentPositionRaw)
                     val currentEntrance = if (currentPositionRaw == source.raw) null else grid.entrances[currentPositionRaw] ?: continue
                     val currentPosition = currentEntrance?.position ?: source
 
@@ -608,7 +639,7 @@ class PathfindingManager {
 
                                 val tentativeAccumulatedCost = currentAccumulatedCost + localPath.calculatePathCost()
 
-                                if (tentativeAccumulatedCost >= accumulatedCostMap.getOrDefault(entranceId, Double.MAX_VALUE)) continue
+                                if (tentativeAccumulatedCost >= accumulatedCostMap.get(entranceId)) continue
                                 accumulatedCostMap[entranceId] = tentativeAccumulatedCost
                                 navigationParentMap[entranceId] = source.raw
 
@@ -656,8 +687,8 @@ class PathfindingManager {
             currentAccumulatedCost: Double,
             target: AreaManager.Position,
             grid: HierarchicalGrid,
-            accumulatedCostMap: HashMap<Long, Double>,
-            navigationParentMap: HashMap<Long, Long>,
+            accumulatedCostMap: Long2DoubleOpenHashMap,
+            navigationParentMap: Long2LongOpenHashMap,
             openSet: PriorityQueue<MacroPathNode>
         ) {
             for (index in edges.indices) {
@@ -665,7 +696,7 @@ class PathfindingManager {
                 val neighborEntrance = grid.entrances[edge.targetEntranceId] ?: continue
                 val tentativeAccumulatedCost = currentAccumulatedCost + edge.cost
 
-                if (tentativeAccumulatedCost >= accumulatedCostMap.getOrDefault(edge.targetEntranceId, Double.MAX_VALUE)) continue
+                if (tentativeAccumulatedCost >= accumulatedCostMap.get(edge.targetEntranceId)) continue
                 accumulatedCostMap[edge.targetEntranceId] = tentativeAccumulatedCost
                 navigationParentMap[edge.targetEntranceId] = currentPositionRaw
 
@@ -676,18 +707,18 @@ class PathfindingManager {
         }
 
         private fun reconstructMacroPath(
-            navigationParentMap: HashMap<Long, Long>,
+            navigationParentMap: Long2LongOpenHashMap,
             targetPositionRaw: Long
         ): LongArray = ArrayList<Long>().apply {
-            var current: Long? = targetPositionRaw
+            var current = targetPositionRaw
 
-            while (current != null) {
+            while (current != -1L) {
                 add(current)
-                current = navigationParentMap[current]
+                current = navigationParentMap.get(current)
             }
         }.let { pathList ->
-            LongArray(pathList.size) {
-                    index -> pathList[pathList.size - 1 - index]
+            LongArray(pathList.size) { index ->
+                pathList[pathList.size - 1 - index]
             }
         }
     }
@@ -711,8 +742,10 @@ class PathfindingManager {
 
         private var isSearching = false
         private var lastTargetLocation: Location? = null
-        private var latestSnapshots: Map<Long, ChunkSnapshot>? = null
+        private var latestSnapshots: Long2ObjectMap<ChunkSnapshot>? = null
+
         private val hierarchicalPathfinder = HierarchicalPathfinder()
+        private var cachedLocalPathfinder: LocalPathfinder? = null
 
         fun navigateTo(targetLocation: Location) {
             if (!entity.isValid || entity.isDead) return
@@ -754,18 +787,23 @@ class PathfindingManager {
                 }
 
                 if (macroIndex < currentMacroPath.size - 1) {
-                    // val startPos = if (macroIndex == 0) entity.location.toPosition() else AreaManager.Position(currentMacroPath[macroIndex])
-
                     val snapshots = latestSnapshots ?: gridRegistry.captureNeighborSnapshots(
                         entity.world,
                         entity.location.blockX shr 4,
                         entity.location.blockZ shr 4
                     )
-                    val generated = LocalPathfinder(
+
+                    val pathfinder = cachedLocalPathfinder?.apply {
+                        this.chunkSnapshots = snapshots
+                    } ?: LocalPathfinder(
                         snapshots,
+                        limitToCurrentChunk = false,
                         mobHeight = mobHeight,
                         mobWidth = mobWidth
-                    ).findPath(
+                    ).also {
+                        cachedLocalPathfinder = it
+                    }
+                    val generated = pathfinder.findPath(
                         entity.location.toPosition(),
                         AreaManager.Position(currentMacroPath[macroIndex + 1]),
                         hierarchicalGrid.area
