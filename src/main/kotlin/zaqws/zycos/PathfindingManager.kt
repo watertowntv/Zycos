@@ -747,6 +747,9 @@ class PathfindingManager {
         private val hierarchicalPathfinder = HierarchicalPathfinder()
         private var cachedLocalPathfinder: LocalPathfinder? = null
 
+        var failed = false
+            internal set
+
         fun navigateTo(targetLocation: Location) {
             if (!entity.isValid || entity.isDead) return
 
@@ -811,9 +814,11 @@ class PathfindingManager {
 
                     if (generated.isEmpty()) {
                         macroPath = null
+                        failed = true
                         return
                     }
 
+                    failed = false
                     localPath = generated
                     localIndex = if (generated.size > 1) 1 else 0
 
@@ -888,9 +893,11 @@ class PathfindingManager {
                     if (resultPath.isEmpty()) {
                         macroPath = null
                         localPath = null
+                        failed = true
                         return@sync
                     }
 
+                    failed = false
                     macroPath = resultPath
                     macroIndex = 0
                     localPath = null
