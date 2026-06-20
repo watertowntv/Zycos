@@ -869,7 +869,9 @@ class PathfindingManager {
             isSearching = true
             lastTargetLocation = targetLocation.clone()
 
-            val snapshots = gridRegistry.captureAreaSnapshots(entity.world, hierarchicalGrid.area)
+            val snapshots = Long2ObjectOpenHashMap<ChunkSnapshot>()
+            snapshots.putAll(gridRegistry.captureNeighborSnapshots(entity.world, sourcePosition.chunkX, sourcePosition.chunkZ))
+            snapshots.putAll(gridRegistry.captureNeighborSnapshots(entity.world, targetPosition.chunkX, targetPosition.chunkZ))
             latestSnapshots = snapshots
 
             scope.launch {
