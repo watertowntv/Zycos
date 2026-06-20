@@ -730,7 +730,7 @@ class PathfindingManager {
         private val hierarchicalGrid: HierarchicalGrid,
         private val scope: CoroutineScope,
         private val gridRegistry: GridRegistry,
-        private val speed: Double = 1.2
+        var speed: Double = 1.0
     ) {
         private val mobHeight = ceil(entity.height).toInt()
         private val mobWidth = entity.width
