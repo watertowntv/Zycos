@@ -909,24 +909,30 @@ class PathfindingManager {
             val position = location.toPosition()
             if (position !in hierarchicalGrid.area) return
 
-            plugin.scope.launch {
-                gridRegistry.rebuildChunk(
-                    hierarchicalGrid,
-                    position.chunkX,
-                    position.chunkZ,
-                    location.world,
-                    plugin
-                )
+            later {
+                plugin.scope.launch {
+                    gridRegistry.rebuildChunk(
+                        hierarchicalGrid,
+                        position.chunkX,
+                        position.chunkZ,
+                        location.world,
+                        plugin
+                    )
+                }
             }
         }
 
         @EventHandler
         fun onBreak(event: BlockBreakEvent) {
+            if (event.isCancelled) return
+
             updateGridAt(event.block.location)
         }
 
         @EventHandler
         fun onPlace(event: BlockPlaceEvent) {
+            if (event.isCancelled) return
+
             updateGridAt(event.block.location)
         }
     }

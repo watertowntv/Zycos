@@ -16,11 +16,12 @@ object AreaManager {
     @JvmInline
     value class Position(val raw: Long) {
         companion object {
-            operator fun invoke(x: Int, y: Int, z: Int) = Position(
+            fun pack(x: Int, y: Int, z: Int) =
                 ((x.toLong() and 0x3FFFFFFL) shl 38) or
                         ((z.toLong() and 0x3FFFFFFL) shl 12) or
                         (y.toLong() and 0xFFFL)
-            )
+
+            operator fun invoke(x: Int, y: Int, z: Int) = Position(pack(x, y, z))
 
             fun lerp(start: Position, target: Position, ratio: Double): Position {
                 val sX = start.x
