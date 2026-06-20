@@ -729,8 +729,7 @@ class PathfindingManager {
         private val entity: Mob,
         private val hierarchicalGrid: HierarchicalGrid,
         private val scope: CoroutineScope,
-        private val gridRegistry: GridRegistry,
-        var speed: Double = 1.0
+        private val gridRegistry: GridRegistry
     ) {
         private val mobHeight = ceil(entity.height).toInt()
         private val mobWidth = entity.width
@@ -747,8 +746,15 @@ class PathfindingManager {
         private val hierarchicalPathfinder = HierarchicalPathfinder()
         private var cachedLocalPathfinder: LocalPathfinder? = null
 
+        var speed: Double = 1.0
+            set(value) {
+                if (field == value) return
+
+                field = value
+                triggerMove()
+            }
         var failed = false
-            internal set
+            private set
 
         fun navigateTo(targetLocation: Location) {
             if (!entity.isValid || entity.isDead) return
