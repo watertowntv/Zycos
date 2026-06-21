@@ -11,11 +11,5 @@ class Main : JavaPlugin(), CommandExecutor {
 
     override fun onEnable() {
         plugin = this
-
-        logger.info("${pluginMeta.displayName} Enabled")
-    }
-
-    override fun onDisable() {
-        logger.info("${pluginMeta.displayName} Disabled")
     }
 }

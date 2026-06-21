@@ -14,6 +14,9 @@ import io.papermc.paper.registry.data.dialog.action.DialogAction
 import io.papermc.paper.registry.data.dialog.body.DialogBody
 import io.papermc.paper.registry.data.dialog.type.DialogType
 import io.papermc.paper.registry.set.RegistrySet
+import net.kyori.adventure.bossbar.BossBar
+import net.kyori.adventure.key.Key
+import net.kyori.adventure.sound.Sound
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.TextComponent
 import net.kyori.adventure.text.event.ClickEvent
@@ -23,15 +26,26 @@ import net.kyori.adventure.text.format.TextDecoration
 import net.kyori.adventure.text.minimessage.MiniMessage
 import net.kyori.adventure.title.Title
 import net.kyori.adventure.title.Title.Times
-import org.bukkit.*
+import org.bukkit.Bukkit
+import org.bukkit.Color
+import org.bukkit.FireworkEffect
+import org.bukkit.GameMode
+import org.bukkit.Location
+import org.bukkit.Material
+import org.bukkit.Particle
+import org.bukkit.Registry
+import org.bukkit.World
 import org.bukkit.attribute.Attribute
 import org.bukkit.block.BlockFace
 import org.bukkit.block.data.BlockData
-import org.bukkit.boss.BarColor
-import org.bukkit.boss.BarStyle
-import org.bukkit.boss.BossBar
 import org.bukkit.enchantments.Enchantment
-import org.bukkit.entity.*
+import org.bukkit.entity.BlockDisplay
+import org.bukkit.entity.Display
+import org.bukkit.entity.Entity
+import org.bukkit.entity.EntityType
+import org.bukkit.entity.Firework
+import org.bukkit.entity.LivingEntity
+import org.bukkit.entity.Player
 import org.bukkit.event.entity.PlayerDeathEvent
 import org.bukkit.inventory.Inventory
 import org.bukkit.inventory.ItemStack
@@ -295,9 +309,7 @@ private fun getCustomPotionImpl(
  * @return Item with Luck_of_the_Sea enchantment (lvl 1)
  */
 fun ItemStack.glow(): ItemStack {
-    val enchantments = getData(
-        DataComponentTypes.ENCHANTMENTS
-    ) ?: return this
+    val enchantments = getData(DataComponentTypes.ENCHANTMENTS) ?: ItemEnchantments.itemEnchantments(emptyMap())
     val builder = ItemEnchantments.itemEnchantments()
         .addAll(enchantments.enchantments())
         .add(Enchantment.LUCK_OF_THE_SEA, 1)
@@ -420,44 +432,73 @@ fun actionbar(message: TextComponent){
 }
 
 /**
- * Plays a global sound
- *
- * @param sound Type of sound
- * @param volume Volume of the sound
- * @param pitch Pitch of the sound
+ * Adventure Sound
  */
-fun playsound(sound: Sound, volume: Float = 1f, pitch: Float = 1f){
-    onlinePlayers.forEach { p->
-        p.playSound(p.location, sound, SoundCategory.WEATHER, volume, pitch)
+fun sound(
+    key: org.bukkit.Sound,
+    source: Sound.Source = Sound.Source.WEATHER,
+    volume: Float = 1.0f,
+    pitch: Float = 1.0f
+) = Sound.sound(
+    Key.key(Registry.SOUNDS.getKey(key).toString()),
+    source,
+    volume,
+    pitch
+)
+
+fun sound(
+    key: String,
+    source: Sound.Source = Sound.Source.WEATHER,
+    volume: Float = 1.0f,
+    pitch: Float = 1.0f
+) = Sound.sound(
+    Key.key(key),
+    source,
+    volume,
+    pitch
+)
+
+fun sound(
+    key: Key,
+    source: Sound.Source = Sound.Source.WEATHER,
+    volume: Float = 1.0f,
+    pitch: Float = 1.0f
+) = Sound.sound(
+    key,
+    source,
+    volume,
+    pitch
+)
+
+fun Sound.play() {
+    onlinePlayers.forEach { player ->
+        player.playSound(this)
     }
 }
 
-/**
- * Plays a global sound at location
- *
- * @param location Location
- * @param sound Type of sound
- * @param volume Volume of the sound
- * @param pitch Pitch of the sound
- */
-fun playsound(
+fun Sound.play(location: Location) {
+    location.world.playSound(this, location.x, location.y, location.z)
+}
+
+fun Sound.play(
     location: Location,
-    sound: Sound,
-    volume: Float = 1f,
-    pitch: Float = 1f,
-    minVolume: Float = 0f,
+    minVolume: Float = 0.0f,
     maxDist: Double = 0.0
-){
-    location.world.playSound(location, sound, SoundCategory.WEATHER, volume, pitch)
+) {
+    location.world.playSound(this, location.x, location.y, location.z)
 
-    if(minVolume > 0f) plugin.server.onlinePlayers.filter {
-        maxDist == 0.0 || it.location.distanceSquared(location) <= maxDist * maxDist
-    }.forEach { p ->
-        val sourceLocation = p.location.add(
-            location.toVector().subtract(p.location.toVector()).fastNormalize().multiply(5)
-        )
+    if (minVolume > 0f) {
+        val minSound = sound(this.name(), this.source(), minVolume, this.pitch())
 
-        p.playSound(sourceLocation, sound, SoundCategory.WEATHER, minVolume, pitch)
+        plugin.server.onlinePlayers.filter {
+            maxDist == 0.0 || it.location.distanceSquared(location) <= maxDist * maxDist
+        }.forEach { player ->
+            val sourceLocation = player.location.add(
+                location.toVector().subtract(player.location.toVector()).fastNormalize().multiply(5)
+            )
+
+            player.playSound(minSound, sourceLocation.x, sourceLocation.y, sourceLocation.z)
+        }
     }
 }
 
@@ -734,7 +775,7 @@ fun launchArrow(
 ) = location.world.spawnArrow(location, vector, speed, spread).apply {
     shooter = entity
 
-    playsound(location, Sound.ENTITY_ARROW_SHOOT)
+    sound(org.bukkit.Sound.ENTITY_ARROW_SHOOT).play(location)
 }
 
 /**
@@ -787,9 +828,8 @@ fun Location.spawnParticle(type: Particle, amount: Int, speed: Double, range: Do
 val Player.isDamageable
     get() = gameMode == GameMode.SURVIVAL || gameMode == GameMode.ADVENTURE
 
-@Suppress("DEPRECATION")
 val Player.onGround: Boolean
-    get() = isOnGround
+    get() = (this as Entity).isOnGround
 
 /**
  * Returns the nearest player
@@ -908,8 +948,8 @@ fun PlayerInventory.addItem(itemStack: ItemStack, silent: Boolean): Int {
 
         setItem(i, itemStack)
 
-        (holder as Player).let { p ->
-            p.playSound(p.location, Sound.ENTITY_ITEM_PICKUP, 1f, 1f)
+        (holder as Player).let { player ->
+            sound(org.bukkit.Sound.ENTITY_ITEM_PICKUP).play(player.location)
         }
 
         return i
@@ -1047,7 +1087,8 @@ val LivingEntity.attackRange: Double
 
 //region LocationUtility
 
-fun Location.toEntityLocation() = clone().toBlockLocation().add(0.5,0.0,0.5)
+fun Location.toEntityLocation() =
+    Location(world, blockX + 0.5, blockY.toDouble(), blockZ + 0.5, yaw, pitch)
 
 fun Location.toGround(filter: List<Material> = listOf()): Location {
     val location = clone()
@@ -1553,18 +1594,20 @@ data class ActionButtonData(
 
 //region Zycos
 
-fun simpleTimer(name: String, tick: Int, callback: () -> Unit): BossBar {
-    val bossBar = Bukkit.createBossBar(name, BarColor.GREEN, BarStyle.SOLID).apply {
-        isVisible = true
-        progress = 1.0
-    }
+fun simpleTimer(name: TextComponent, tick: Int, callback: () -> Unit): BossBar {
+    val bossBar = BossBar.bossBar(
+        name,
+        1.0f,
+        BossBar.Color.GREEN,
+        BossBar.Overlay.PROGRESS
+    )
 
     loop(tick) { i, _ ->
-        bossBar.progress = (1.0 - i.toDouble() / tick).clip(0.0, 1.0)
+        bossBar.progress((1.0 - i.toDouble() / tick).clip(0.0, 1.0).toFloat())
     }
 
     later(tick) {
-        bossBar.removeAll()
+        onlinePlayers.forEach { it.hideBossBar(bossBar) }
         callback()
     }
 

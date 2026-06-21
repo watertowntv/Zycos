@@ -2,32 +2,35 @@
 
 package zaqws.zycos
 
-import org.bukkit.Bukkit
-import org.bukkit.boss.BarColor
-import org.bukkit.boss.BarStyle
-import org.bukkit.boss.BossBar
+import net.kyori.adventure.bossbar.BossBar
 import org.bukkit.entity.Player
 import org.bukkit.scheduler.BukkitRunnable
+
 
 abstract class TimerTask(
     minutes: Int = 1,
     seconds: Int = 0,
     var visible: Boolean = true,
-    val initialPlayers: List<Player> = listOf()
+    initialPlayers: List<Player> = listOf()
 ) {
     protected var bossBar: BossBar? = null
+    protected val viewers = mutableListOf<Player>()
+
     protected val totalSeconds = minutes * 60 + seconds + 1
     protected var remainingSeconds = totalSeconds
     protected var remove = false
 
     init {
-        bossBar = Bukkit.createBossBar("남은시간: ${minutes}분 ${seconds}초", BarColor.GREEN, BarStyle.SOLID).apply {
-            isVisible = visible
-            progress = 1.0
+        bossBar = BossBar.bossBar(
+            text("남은시간: ${minutes}분 ${seconds}초"),
+            1.0f,
+            BossBar.Color.GREEN,
+            BossBar.Overlay.PROGRESS
+        )
+        viewers.addAll(initialPlayers.ifEmpty { onlinePlayers })
 
-            initialPlayers.ifEmpty {
-                onlinePlayers
-            }.forEach(this::addPlayer)
+        if (visible) viewers.forEach { viewer ->
+            viewer.showBossBar(bossBar!!)
         }
 
         onStart()
@@ -55,14 +58,16 @@ abstract class TimerTask(
         }
 
         bossBar?.apply {
-            isVisible = visible
-
             val minutes = remainingSeconds / 60
             val seconds = remainingSeconds % 60
 
-            setTitle("남은시간: ${minutes}분 ${seconds}초")
+            name(text("남은시간: ${minutes}분 ${seconds}초"))
+            progress((remainingSeconds.toDouble() / totalSeconds).toFloat().coerceIn(0.0f, 1.0f))
 
-            progress = remainingSeconds.toDouble() / totalSeconds
+            viewers.forEach { player ->
+                if (visible) player.showBossBar(this)
+                else player.hideBossBar(this)
+            }
         }
     }
 
@@ -70,9 +75,9 @@ abstract class TimerTask(
         remove = true
 
         bossBar?.apply {
-            progress = 0.0
-            isVisible = false
-            removeAll()
+            progress(0.0f)
+            viewers.forEach { it.hideBossBar(this) }
+            viewers.clear()
         }
 
         bossBar = null
