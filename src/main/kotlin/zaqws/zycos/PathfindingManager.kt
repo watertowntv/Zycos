@@ -10,6 +10,7 @@ import it.unimi.dsi.fastutil.longs.LongArrayList
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -20,6 +21,7 @@ import org.bukkit.Material
 import org.bukkit.World
 import org.bukkit.entity.Mob
 import org.bukkit.event.EventHandler
+import org.bukkit.event.EventPriority
 import org.bukkit.event.Listener
 import org.bukkit.event.block.BlockBreakEvent
 import org.bukkit.event.block.BlockPlaceEvent
@@ -28,6 +30,7 @@ import zaqws.zycos.CoroutineManager.scope
 import java.util.*
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.locks.ReentrantReadWriteLock
+import kotlin.math.abs
 import kotlin.math.ceil
 
 
@@ -214,11 +217,11 @@ class PathfindingManager {
 
         private fun expandNeighbors(
             current: AreaManager.Position,
-            end: AreaManager.Position,
+            end: AreaManager.Position?,
             area: AreaManager.Area,
             openSet: PriorityQueue<PathNode>,
             accumulatedCostMap: Long2DoubleOpenHashMap,
-            navigationParentMap: Long2LongOpenHashMap
+            navigationParentMap: Long2LongOpenHashMap?
         ) {
             val currentAccumulatedCost = accumulatedCostMap.get(current.raw)
 
@@ -245,11 +248,12 @@ class PathfindingManager {
                     val targetAccumulatedCost = accumulatedCostMap.get(targetPosition.raw)
                     if (tentativeAccumulatedCost >= targetAccumulatedCost) continue
 
-                    navigationParentMap[targetPosition.raw] = current.raw
+                    navigationParentMap?.put(targetPosition.raw, current.raw)
                     accumulatedCostMap[targetPosition.raw] = tentativeAccumulatedCost
 
+                    val heuristic = end?.distance(targetPosition) ?: 0.0
                     openSet.add(
-                        PathNode(targetPosition.raw, tentativeAccumulatedCost + targetPosition.distance(end))
+                        PathNode(targetPosition.raw, tentativeAccumulatedCost + heuristic)
                     )
                 }
             }
@@ -324,12 +328,47 @@ class PathfindingManager {
 
             return false
         }
+
+
+        fun findCostsToAllEntrances(
+            start: AreaManager.Position,
+            entranceIds: List<Long>,
+            area: AreaManager.Area
+        ): Long2DoubleOpenHashMap {
+            val results = Long2DoubleOpenHashMap()
+            val remainingTargets = entranceIds.toMutableSet()
+
+            openSet.clear()
+            accumulatedCostMap.clear()
+            lastChunkKey = -1L
+            lastSnapshot = null
+
+            accumulatedCostMap[start.raw] = 0.0
+            openSet.add(PathNode(start.raw, 0.0))
+
+            while (openSet.isNotEmpty() && remainingTargets.isNotEmpty()) {
+                val currentRecord = openSet.poll()
+                val currentRaw = currentRecord.positionRaw
+
+                if (remainingTargets.remove(currentRaw)) {
+                    results[currentRaw] = accumulatedCostMap.get(currentRaw)
+                }
+
+                val currentPosition = AreaManager.Position(currentRaw)
+                val currentAccumulatedCost = accumulatedCostMap.get(currentRaw)
+                if (currentRecord.estimatedTotalCost > currentAccumulatedCost + 1e-9) continue
+
+                expandNeighbors(currentPosition, null, area, openSet, accumulatedCostMap, null)
+            }
+
+            return results
+        }
     }
 
 
     class GridRegistry {
         private val gridRegistryMap = ConcurrentHashMap<String, HierarchicalGrid>()
-        private val chunkLocks = ConcurrentHashMap<Long, Mutex>()
+        private val chunkLocks = Array(1024) { Mutex() }
 
         fun getOrCreateGrid(identifier: String, area: AreaManager.Area): HierarchicalGrid =
             gridRegistryMap.getOrPut(identifier) { HierarchicalGrid(area) }
@@ -422,12 +461,14 @@ class PathfindingManager {
             plugin: JavaPlugin
         ) {
             val chunkKey = getChunkKey(chunkX, chunkZ)
-            val mutex = chunkLocks.getOrPut(chunkKey) { Mutex() }
+            val lockIndex = abs((chunkKey xor (chunkKey ushr 32)).toInt().let { if (it == Int.MIN_VALUE) 0 else it }) % 1024
+            val mutex = chunkLocks[lockIndex]
 
             mutex.withLock {
                 val neighborSnapshots = withContext(CoroutineManager.PaperDispatcher(plugin)) {
                     captureNeighborSnapshots(world, chunkX, chunkZ)
                 }
+                if (neighborSnapshots.size < 9) return
 
                 withContext(Dispatchers.Default) {
                     hierarchicalGrid.hierarchicalLock.writeLock().lock()
@@ -599,13 +640,6 @@ class PathfindingManager {
                 estimatedTotalCost.compareTo(other.estimatedTotalCost)
         }
 
-        private val accumulatedCostMap = Long2DoubleOpenHashMap().apply {
-            defaultReturnValue(Double.MAX_VALUE)
-        }
-        private val navigationParentMap = Long2LongOpenHashMap().apply {
-            defaultReturnValue(-1L)
-        }
-
         suspend fun findHierarchicalPath(
             source: AreaManager.Position,
             target: AreaManager.Position,
@@ -625,8 +659,12 @@ class PathfindingManager {
             try {
                 val openSet = PriorityQueue<MacroPathNode>()
 
-                accumulatedCostMap.clear()
-                navigationParentMap.clear()
+                val accumulatedCostMap = Long2DoubleOpenHashMap().apply {
+                    defaultReturnValue(Double.MAX_VALUE)
+                }
+                val navigationParentMap = Long2LongOpenHashMap().apply {
+                    defaultReturnValue(-1L)
+                }
 
                 accumulatedCostMap[source.raw] = 0.0
                 openSet.add(
@@ -635,6 +673,8 @@ class PathfindingManager {
 
                 val sourceCluster = grid.clusters[getChunkKey(source.chunkX, source.chunkZ)]
                 while (openSet.isNotEmpty()) {
+                    ensureActive()
+
                     val currentRecord = openSet.poll()
                     val currentPositionRaw = currentRecord.positionRaw
 
@@ -650,15 +690,15 @@ class PathfindingManager {
                     if (currentPositionRaw == source.raw) {
                         if (sourceCluster != null) {
                             val entranceIds = sourceCluster.entranceIds
+                            val costsMap = localPathfinder.findCostsToAllEntrances(source, entranceIds, grid.area)
 
                             for (index in entranceIds.indices) {
                                 val entranceId = entranceIds[index]
                                 val entrance = grid.entrances[entranceId] ?: continue
+                                if (!costsMap.containsKey(entranceId)) continue
 
-                                val localPath = localPathfinder.findPath(source, entrance.position, grid.area)
-                                if (localPath.isEmpty()) continue
-
-                                val tentativeAccumulatedCost = currentAccumulatedCost + localPath.calculatePathCost()
+                                val pathCost = costsMap.get(entranceId)
+                                val tentativeAccumulatedCost = currentAccumulatedCost + pathCost
 
                                 if (tentativeAccumulatedCost >= accumulatedCostMap.get(entranceId)) continue
                                 accumulatedCostMap[entranceId] = tentativeAccumulatedCost
@@ -756,12 +796,16 @@ class PathfindingManager {
         private val mobHeight = ceil(entity.height).toInt()
         private val mobWidth = entity.width
 
+        private var lastFailureTime = 0L
+        private var isCalculatingLocalPath = false
+
         private var macroPath: LongArray? = null
         private var localPath: LongArray? = null
         private var macroIndex = 0
         private var localIndex = 0
 
         private var searchJob: Job? = null
+        private var localSearchJob: Job? = null
         private var lastTargetLocation: Location? = null
         private var latestSnapshots: Long2ObjectMap<ChunkSnapshot>? = null
 
@@ -798,9 +842,10 @@ class PathfindingManager {
                 lastTarget != null && lastTarget.distanceSquared(targetLocation) <= threshold) {
                 return
             }
-            if (mPath == null || macroIndex >= mPath.size || lastTarget == null || lastTarget.distanceSquared(targetLocation) > threshold) {
-                requestPathAsync(entity.location.toPosition(), targetLocation.toPosition(), targetLocation)
-            }
+            if (mPath == null || macroIndex >= mPath.size || lastTarget == null || lastTarget.distanceSquared(targetLocation) > threshold)
+                if (!failed || System.currentTimeMillis() - lastFailureTime > 1000) {
+                    requestPathAsync(entity.location.toPosition(), targetLocation.toPosition(), targetLocation)
+                }
 
             val activeLocalPath = localPath
             if (activeLocalPath == null || localIndex >= activeLocalPath.size) {
@@ -841,24 +886,47 @@ class PathfindingManager {
                     ).also {
                         cachedLocalPathfinder = it
                     }
-                    val generated = pathfinder.findPath(
-                        entity.location.toPosition(),
-                        AreaManager.Position(currentMacroPath[macroIndex + 1]),
-                        hierarchicalGrid.area
-                    )
 
-                    if (generated.isEmpty()) {
-                        macroPath = null
-                        failed = true
+                    if (isCalculatingLocalPath) {
+                        val direction = entity.location.directionTo(targetLocation)
+                        val intermediateLocation = entity.location.clone().add(
+                            direction.fastNormalize().multiply(2.0)
+                        )
+
+                        entity.pathfinder.moveTo(intermediateLocation, speed)
                         return
                     }
 
-                    failed = false
-                    localPath = generated
-                    localIndex = if (generated.size > 1) 1 else 0
+                    val currentPos = entity.location.toPosition()
+                    val targetNodePos = AreaManager.Position(currentMacroPath[macroIndex + 1])
+                    isCalculatingLocalPath = true
+                    localSearchJob?.cancel()
 
-                    macroIndex++
-                    triggerMove()
+                    localSearchJob = scope.launch {
+                        val generated = withContext(Dispatchers.Default) {
+                            pathfinder.findPath(currentPos, targetNodePos, hierarchicalGrid.area)
+                        }
+
+                        sync {
+                            isCalculatingLocalPath = false
+                            if (!entity.isValid || entity.isDead) return@sync
+
+                            if (generated.isEmpty()) {
+                                macroPath = null
+                                failed = true
+                                latestSnapshots = null
+
+                                return@sync
+                            }
+
+                            failed = false
+                            localPath = generated
+                            localIndex = if (generated.size > 1) 1 else 0
+
+                            macroIndex++
+                            triggerMove()
+                        }
+                    }
                 } else {
                     macroPath = null
                     localPath = null
@@ -880,7 +948,7 @@ class PathfindingManager {
             val currentLocalPath = localPath ?: return
             val targetNodePosition = AreaManager.Position(currentLocalPath[localIndex])
 
-            if (currentPosition.distanceSquared2D(targetNodePosition) < 2.25) {
+            if (currentPosition.distanceSquared2D(targetNodePosition) < 2.25 && abs(currentPosition.y - targetNodePosition.y) <= 1) {
                 if (++localIndex >= currentLocalPath.size) navigateTo(targetLocation)
                 else triggerMove()
 
@@ -906,6 +974,7 @@ class PathfindingManager {
             targetLocation: Location
         ) {
             searchJob?.cancel()
+            localSearchJob?.cancel()
             lastTargetLocation = targetLocation.clone()
 
             val snapshots = Long2ObjectOpenHashMap<ChunkSnapshot>()
@@ -928,6 +997,9 @@ class PathfindingManager {
                         macroPath = null
                         localPath = null
                         failed = true
+                        latestSnapshots = null
+                        lastFailureTime = System.currentTimeMillis()
+
                         return@sync
                     }
 
@@ -965,18 +1037,28 @@ class PathfindingManager {
             }
         }
 
-        @EventHandler
+        @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
         fun onBreak(event: BlockBreakEvent) {
             if (event.isCancelled) return
 
             updateGridAt(event.block.location)
         }
 
-        @EventHandler
+        @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
         fun onPlace(event: BlockPlaceEvent) {
             if (event.isCancelled) return
 
             updateGridAt(event.block.location)
+        }
+
+        @EventHandler(priority = EventPriority.MONITOR)
+        fun onChunkLoad(event: org.bukkit.event.world.ChunkLoadEvent) {
+            val chunk = event.chunk
+            val location = Location(event.world, (chunk.x shl 4).toDouble(), 0.0, (chunk.z shl 4).toDouble())
+
+            if (location.toPosition() in hierarchicalGrid.area) plugin.scope.launch {
+                gridRegistry.rebuildChunk(hierarchicalGrid, chunk.x, chunk.z, event.world, plugin)
+            }
         }
     }
 }
