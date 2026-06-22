@@ -2,10 +2,22 @@
 
 package zaqws.zycos
 
+import com.mojang.brigadier.LiteralMessage
+import com.mojang.brigadier.arguments.ArgumentType
+import com.mojang.brigadier.builder.ArgumentBuilder
+import com.mojang.brigadier.builder.LiteralArgumentBuilder
+import com.mojang.brigadier.builder.RequiredArgumentBuilder
+import com.mojang.brigadier.context.CommandContext
+import com.mojang.brigadier.exceptions.SimpleCommandExceptionType
 import io.papermc.paper.block.BlockPredicate
+import io.papermc.paper.command.brigadier.CommandSourceStack
+import io.papermc.paper.command.brigadier.Commands
+import io.papermc.paper.command.brigadier.argument.resolvers.selector.EntitySelectorArgumentResolver
+import io.papermc.paper.command.brigadier.argument.resolvers.selector.PlayerSelectorArgumentResolver
 import io.papermc.paper.datacomponent.DataComponentTypes
 import io.papermc.paper.datacomponent.item.*
 import io.papermc.paper.dialog.Dialog
+import io.papermc.paper.plugin.lifecycle.event.types.LifecycleEvents
 import io.papermc.paper.registry.RegistryKey
 import io.papermc.paper.registry.TypedKey
 import io.papermc.paper.registry.data.dialog.ActionButton
@@ -25,6 +37,7 @@ import net.kyori.adventure.text.event.HoverEvent
 import net.kyori.adventure.text.format.NamedTextColor
 import net.kyori.adventure.text.format.TextDecoration
 import net.kyori.adventure.text.minimessage.MiniMessage
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import net.kyori.adventure.title.Title
 import net.kyori.adventure.title.Title.Times
 import org.bukkit.Bukkit
@@ -1575,7 +1588,7 @@ fun trace(
     end: Location,
     interval: Double = 0.05,
     callback: (world: World, x: Double, y: Double, z: Double) -> Unit
-){
+) {
     if(interval <= 0.0 || 1.0 < interval)
         throw IllegalArgumentException("Interval must be 0 < x <= 1")
 
@@ -2078,5 +2091,154 @@ fun <T : Comparable<T>> binaryListOf() =
 
 fun <T : Comparable<T>> binaryListOf(vararg elements: T) =
     BinaryList(elements.toMutableList(), compareBy { it })
+
+//endregion
+
+
+//region Command
+
+/**
+ * Command Brigadier
+ *
+ * @param name Name of command
+ * @param aliases Alias
+ * @param description Description
+ * @param builder Literal Argument Builder
+ */
+fun JavaPlugin.registerCommandTree(
+    name: String,
+    aliases: List<String> = emptyList(),
+    description: String? = null,
+    builder: LiteralArgumentBuilder<CommandSourceStack>.() -> Unit
+) {
+    this.lifecycleManager.registerEventHandler(LifecycleEvents.COMMANDS) { event ->
+        val node = Commands.literal(name).apply(builder).build()
+        event.registrar().register(node, description, aliases)
+    }
+}
+
+/**
+ * ArgumentBuilder::executes without 1
+ */
+inline fun <T : ArgumentBuilder<CommandSourceStack, T>> T.execute(
+    crossinline block: (CommandContext<CommandSourceStack>) -> Unit
+): T = this.executes { ctx ->
+    block(ctx)
+    1
+}
+
+/**
+ * Child Command
+ *
+ * @param name Name
+ * @param builder Literal Argument Builder
+ */
+fun <T : ArgumentBuilder<CommandSourceStack, T>> T.node(
+    name: String,
+    builder: LiteralArgumentBuilder<CommandSourceStack>.() -> Unit
+): T = this.then(Commands.literal(name).apply(builder))
+
+fun <T : ArgumentBuilder<CommandSourceStack, T>> T.leaf(
+    name: String,
+    action: (CommandContext<CommandSourceStack>) -> Unit
+): T = this.then(Commands.literal(name).executes { ctx ->
+    action(ctx)
+    1
+})
+
+
+fun <T : ArgumentBuilder<CommandSourceStack, T>, R : Any> T.argument(
+    name: String,
+    type: ArgumentType<R>,
+    builder: RequiredArgumentBuilder<CommandSourceStack, R>.() -> Unit
+): T = this.then(Commands.argument(name, type).apply(builder))
+
+fun <T : ArgumentBuilder<CommandSourceStack, T>, R : Any> T.argument(
+    name: String,
+    type: ArgumentType<R>,
+    suggest: ((CommandContext<CommandSourceStack>) -> Collection<String>)? = null,
+    action: (CommandContext<CommandSourceStack>) -> Unit
+): T {
+    var builder = Commands.argument(name, type)
+    if (suggest != null) builder = builder.suggest(suggest)
+
+    return this.then(builder.execute(action))
+}
+
+
+fun <T : ArgumentBuilder<CommandSourceStack, T>, R : Any> T.arguments(
+    vararg names: String,
+    type: ArgumentType<R>,
+    action: (CommandContext<CommandSourceStack>) -> Unit
+): T {
+    if (names.isEmpty()) return this
+    var tail: ArgumentBuilder<CommandSourceStack, *> =
+        Commands.argument(names.last(), type).execute(action)
+
+    for (i in names.size - 2 downTo 0) {
+        tail = Commands.argument(names[i], type).then(tail)
+    }
+
+    return this.then(tail)
+}
+
+
+inline fun <reified T> CommandContext<CommandSourceStack>.getArgument(name: String): T =
+    this.getArgument(name, T::class.java)
+
+inline fun <reified T> CommandContext<CommandSourceStack>.senderAs(): T? =
+    this.source.sender as? T
+
+fun <T> RequiredArgumentBuilder<CommandSourceStack, T>.suggest(
+    provider: (CommandContext<CommandSourceStack>) -> Collection<String>
+): RequiredArgumentBuilder<CommandSourceStack, T> = this.suggests { ctx, builder ->
+    provider(ctx).forEach { builder.suggest(it) }
+    builder.buildFuture()
+}
+
+
+inline fun <T : ArgumentBuilder<CommandSourceStack, T>> T.executeAsPlayer(
+    crossinline block: CommandContext<CommandSourceStack>.(Player) -> Unit
+): T = this.executes { ctx ->
+    val player = ctx.source.sender as? Player
+    if (player != null) {
+        ctx.block(player)
+        1
+    } else {
+        ctx.source.sender.sendMessage(
+            Component.text("Sender is not Player", NamedTextColor.RED)
+        )
+        0
+    }
+}
+
+
+fun <T : ArgumentBuilder<CommandSourceStack, T>> T.requiresOp(): T =
+    this.requires { it.sender.isOp }
+
+fun <T : ArgumentBuilder<CommandSourceStack, T>> T.requiresPermission(permission: String): T =
+    this.requires { it.sender.hasPermission(permission) }
+
+
+fun CommandContext<CommandSourceStack>.getSinglePlayer(name: String): Player? =
+    this.getArgument<PlayerSelectorArgumentResolver>(name).resolve(this.source).firstOrNull()
+
+fun CommandContext<CommandSourceStack>.getPlayers(name: String): List<Player> =
+    this.getArgument<PlayerSelectorArgumentResolver>(name).resolve(this.source)
+
+fun CommandContext<CommandSourceStack>.getEntities(name: String): List<Entity> =
+    this.getArgument<EntitySelectorArgumentResolver>(name).resolve(this.source)
+
+
+@Suppress("UnusedReceiverParameter")
+fun CommandContext<CommandSourceStack>.fail(message: String): Nothing {
+    throw SimpleCommandExceptionType(LiteralMessage(message)).create()
+}
+
+@Suppress("UnusedReceiverParameter")
+fun CommandContext<CommandSourceStack>.fail(component: Component): Nothing {
+    val plainText = PlainTextComponentSerializer.plainText().serialize(component)
+    throw SimpleCommandExceptionType { plainText }.create()
+}
 
 //endregion
