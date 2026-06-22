@@ -102,6 +102,17 @@ class PathfindingManager {
             cleanOrphanEdges(chunkX, chunkZ)
         }
 
+        fun clear() {
+            hierarchicalLock.writeLock().lock()
+
+            try {
+                clusters.clear()
+                entrances.clear()
+            } finally {
+                hierarchicalLock.writeLock().unlock()
+            }
+        }
+
         private fun cleanOrphanEdges(targetChunkX: Int, targetChunkZ: Int) {
             for (dx in -1..1)
                 for (dz in -1..1) {
