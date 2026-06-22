@@ -927,6 +927,8 @@ class PathfindingManager {
                             triggerMove()
                         }
                     }
+
+                    return
                 } else {
                     macroPath = null
                     localPath = null
