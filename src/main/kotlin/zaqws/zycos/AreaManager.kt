@@ -126,7 +126,7 @@ object AreaManager {
     class Area(
         val start: Position,
         val end: Position
-    ) : Cloneable {
+    ) {
         val boundingBoxStart = Position(
             min(start.x, end.x),
             min(start.y, end.y),
@@ -168,8 +168,6 @@ object AreaManager {
             return x && y && z
         }
 
-        override fun clone() = Area(start, end)
-
         fun random() = Position(
             randomRange(boundingBoxStart.x, boundingBoxEnd.x),
             randomRange(boundingBoxStart.y, boundingBoxEnd.y),
@@ -193,12 +191,14 @@ object AreaManager {
             }
         val size: Long
             get() {
-                val x = boundingBoxEnd.x - boundingBoxStart.x
-                val y = boundingBoxEnd.y - boundingBoxStart.y
-                val z = boundingBoxEnd.z - boundingBoxStart.z
+                val x = boundingBoxEnd.x - boundingBoxStart.x + 1
+                val y = boundingBoxEnd.y - boundingBoxStart.y + 1
+                val z = boundingBoxEnd.z - boundingBoxStart.z + 1
 
                 return x.toLong() * y.toLong() * z.toLong()
             }
+
+        fun clone() = Area(start, end)
 
         fun query() = AreaQuery { callback ->
             val rangeX = boundingBoxStart.x..boundingBoxEnd.x

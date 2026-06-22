@@ -14,6 +14,7 @@ import io.papermc.paper.registry.data.dialog.action.DialogAction
 import io.papermc.paper.registry.data.dialog.body.DialogBody
 import io.papermc.paper.registry.data.dialog.type.DialogType
 import io.papermc.paper.registry.set.RegistrySet
+import net.kyori.adventure.audience.Audience
 import net.kyori.adventure.bossbar.BossBar
 import net.kyori.adventure.key.Key
 import net.kyori.adventure.sound.Sound
@@ -74,6 +75,7 @@ val secureRandom = SecureRandom()
 val overworld: World = Bukkit.getWorlds().first()
 val onlinePlayers: Collection<Player>
     get() = Bukkit.getOnlinePlayers()
+val miniMessage = MiniMessage.miniMessage()
 
 //endregion
 
@@ -83,16 +85,17 @@ val onlinePlayers: Collection<Player>
 /**
  * Creates a named ItemStack
  *
- * @param type Material of the item
- * @param name Name of the item
- * @param lore Lore of the item
- * @param enchantments Enchantments of the item
- * @param amount Amount of the item
- * @param unbreakable Makes item unbreakable
- * @param hideEnchantments Hides enchantments
- * @param hideAttributes Hides attributes
- * @param hideUnbreakable Hides unbreakable
- * @param hideTooltip Hides ALL
+ * @param type Material
+ * @param name Name
+ * @param lore Lore
+ * @param enchantments Enchantments
+ * @param amount Amount
+ * @param unbreakable Unbreakable
+ * @param hideEnchantments Hide Enchantments
+ * @param hideAttributes Hide Attributes
+ * @param hideUnbreakable Aide Unbreakable
+ * @param hideTooltip Hides All
+ * @param customModelData Custom Model Data String
  * @return ItemStack
  */
 fun getNamedItem(
@@ -109,6 +112,7 @@ fun getNamedItem(
     hideEnchantments: Boolean = false,
     hideAttributes: Boolean = false,
     hideUnbreakable: Boolean = false,
+    customModelData: String? = null
 ): ItemStack {
     val itemStack = ItemStack.of(type, amount).apply {
         if (name != null) {
@@ -137,7 +141,7 @@ fun getNamedItem(
         )
         if (maxStackSize != null) setData(
             DataComponentTypes.MAX_STACK_SIZE,
-            maxStackSize.clip(1, 99)
+            maxStackSize.coerceIn(1, 99)
         )
 
         if (hideEnchantments || hideAttributes || hideUnbreakable || hideTooltip) {
@@ -169,6 +173,11 @@ fun getNamedItem(
             DataComponentTypes.CAN_BREAK,
             createAdventurePredicate(canBreak)
         )
+
+        if (customModelData != null) setData(
+            DataComponentTypes.CUSTOM_MODEL_DATA,
+            CustomModelData.customModelData().addString(customModelData).build()
+        )
     }
 
     return itemStack
@@ -177,11 +186,11 @@ fun getNamedItem(
 /**
  * Creates a named player head
  *
- * @param playerName Name of the player
- * @param name Name of the Item
- * @param lore Lore of the item
- * @param amount Amount of the item
- * @return Player head
+ * @param playerName Name of Player
+ * @param name Name
+ * @param lore Lore
+ * @param amount Amount
+ * @return Player Head
  */
 fun getNamedSkull(
     playerName: String,
@@ -215,13 +224,13 @@ fun getNamedSkull(
 /**
  * Creates a potion with custom effects
  *
- * @param type Effect type of the potion
- * @param amplifier Amplifier of the potion
- * @param duration Duration of the potion
- * @param particle Shows particles of the potion
- * @param name Name of the potion
- * @param color Color of the potion
- * @return Potion with custom effects
+ * @param type Effect Type
+ * @param amplifier Amplifier
+ * @param duration Duration Ticks
+ * @param particle Show Particles
+ * @param name Name
+ * @param color Color
+ * @return Potion with Custom Effect
  */
 fun getCustomPotion(
     type: PotionEffectType,
@@ -243,13 +252,13 @@ fun getCustomPotion(
 /**
  * Creates a splash potion with custom effects
  *
- * @param type Effect type of the potion
- * @param amplifier Amplifier of the potion
- * @param duration Duration of the potion
- * @param particle Shows particles of the potion
- * @param name Name of the potion
- * @param color Color of the potion
- * @return Splash potion with custom effects
+ * @param type Effect Type
+ * @param amplifier Amplifier
+ * @param duration Duration Ticks
+ * @param particle Show Particles
+ * @param name Name
+ * @param color Color
+ * @return Splash Potion with Custom Effect
  */
 fun getCustomSplashPotion(
     type: PotionEffectType,
@@ -345,6 +354,13 @@ fun ItemStack.invisible(): ItemStack {
     return this
 }
 
+/**
+ * Merchant Recipe Helper
+ *
+ * @param ingredient Ingredient
+ * @param result Result
+ * @return MerchantRecipe
+ */
 fun MerchantRecipe(
     ingredient: ItemStack,
     result: ItemStack
@@ -352,6 +368,14 @@ fun MerchantRecipe(
     addIngredient(ingredient)
 }
 
+/**
+ * Merchant Recipe Helper
+ *
+ * @param ingredient1 Ingredient 1
+ * @param ingredient2 Ingredient 2
+ * @param result Result
+ * @return MerchantRecipe
+ */
 fun MerchantRecipe(
     ingredient1: ItemStack,
     ingredient2: ItemStack,
@@ -367,9 +391,9 @@ fun MerchantRecipe(
 //region ClientUtility
 
 /**
- * Sends a global message
+ * BroadcastMessage
  *
- * @param message Message to print
+ * @param message Text Component
  */
 fun broadcast(message: TextComponent){
     Bukkit.broadcast(message)
@@ -380,14 +404,16 @@ fun broadcast(message: TextComponent){
  *
  * @param titleText Title
  * @param subtitleText Subtitle
- * @param fadeIn Fade in duration
- * @param stay Display duration
- * @param fadeOut Fade out duration
+ * @param fadeIn Fade In Duration
+ * @param stay Display Duration
+ * @param fadeOut Fade Out Duration
  */
 fun title(
     titleText: TextComponent,
     subtitleText: TextComponent = Component.text(""),
-    fadeIn: Int = 5, stay: Int = 30, fadeOut: Int = 5
+    fadeIn: Int = 5,
+    stay: Int = 30,
+    fadeOut: Int = 5
 ){
     val title = Title.title(
         titleText,
@@ -400,10 +426,21 @@ fun title(
     }
 }
 
+/**
+ * Sends player a title
+ *
+ * @param titleText Title
+ * @param subtitleText Subtitle
+ * @param fadeIn Fade In Duration
+ * @param stay Display Duration
+ * @param fadeOut Fade Out Duration
+ */
 fun Player.sendTitle(
     titleText: TextComponent,
     subtitleText: TextComponent = Component.text(""),
-    fadeIn: Int = 5, stay: Int = 30, fadeOut: Int = 5
+    fadeIn: Int = 5,
+    stay: Int = 30,
+    fadeOut: Int = 5
 ) {
     val title = Title.title(
         titleText,
@@ -414,6 +451,14 @@ fun Player.sendTitle(
     showTitle(title)
 }
 
+/**
+ * TitleTimes helper
+ *
+ * @param fadeIn Fade In Duration
+ * @param stay Display Duration
+ * @param fadeOut Fade Out Duration
+ * @return Times
+ */
 fun TitleTimes(fadeIn: Int, stay: Int, fadeOut: Int) = Times.times(
     Duration.ofMillis(fadeIn * 50L),
     Duration.ofMillis(stay * 50L),
@@ -421,7 +466,7 @@ fun TitleTimes(fadeIn: Int, stay: Int, fadeOut: Int) = Times.times(
 )
 
 /**
- * Displays a global actionbar
+ * Broadcast Actionbar
  *
  * @param message Message
  */
@@ -433,6 +478,12 @@ fun actionbar(message: TextComponent){
 
 /**
  * Adventure Sound
+ *
+ * @param key Sound
+ * @param source Source
+ * @param volume Volume
+ * @param pitch Pitch
+ * @return Sound
  */
 fun sound(
     key: org.bukkit.Sound,
@@ -446,6 +497,15 @@ fun sound(
     pitch
 )
 
+/**
+ * Adventure Sound
+ *
+ * @param key Sound String
+ * @param source Source
+ * @param volume Volume
+ * @param pitch Pitch
+ * @return Sound
+ */
 fun sound(
     key: String,
     source: Sound.Source = Sound.Source.WEATHER,
@@ -458,6 +518,15 @@ fun sound(
     pitch
 )
 
+/**
+ * Adventure Sound
+ *
+ * @param key Key
+ * @param source Source
+ * @param volume Volume
+ * @param pitch Pitch
+ * @return Sound
+ */
 fun sound(
     key: Key,
     source: Sound.Source = Sound.Source.WEATHER,
@@ -470,16 +539,29 @@ fun sound(
     pitch
 )
 
+/**
+ * Play Sound
+ */
 fun Sound.play() {
-    onlinePlayers.forEach { player ->
-        player.playSound(this)
-    }
+    Audience.audience(onlinePlayers).playSound(this)
 }
 
+/**
+ * Play Sound
+ *
+ * @param location Location
+ */
 fun Sound.play(location: Location) {
     location.world.playSound(this, location.x, location.y, location.z)
 }
 
+/**
+ * Play Sound
+ *
+ * @param location Location
+ * @param minVolume Minimum Volume in Maximum Distance
+ * @param maxDist Maximum Distance
+ */
 fun Sound.play(
     location: Location,
     minVolume: Float = 0.0f,
@@ -508,7 +590,7 @@ fun Sound.play(
 fun Player.clearMessage() {
     val empty = text("")
 
-    for(i in 0..100) {
+    for (i in 0..100) {
         sendMessage(empty)
     }
 }
@@ -529,9 +611,19 @@ fun text(text: String = "", color: NamedTextColor = NamedTextColor.WHITE) =
 fun TextComponent.text(text: String = "", color: NamedTextColor = NamedTextColor.WHITE) =
     append(Component.text(text, color))
 
+/**
+ * Adds hover event
+ *
+ * @param hoverText Hover Event Text Component
+ */
 fun TextComponent.hover(hoverText: TextComponent) =
     hoverEvent(HoverEvent.showText(hoverText))
 
+/**
+ * Adds click event
+ *
+ * @param callback Callback on Click Event
+ */
 fun TextComponent.click(callback: (clicked: Player) -> Unit) =
     clickEvent(ClickEvent.callback { audience ->
         val player = audience as? Player ?: return@callback
@@ -539,9 +631,33 @@ fun TextComponent.click(callback: (clicked: Player) -> Unit) =
         callback(player)
     })
 
-fun String.miniMessage() = MiniMessage.miniMessage()
+/**
+ * Joins collections of Component
+ *
+ * @param separator Separator
+ * @return Component
+ */
+fun Iterable<Component>.join(separator: Component = Component.newline()): Component {
+    val iterator = this.iterator()
+    if (!iterator.hasNext()) return Component.empty()
+
+    val builder = Component.text()
+    builder.append(iterator.next())
+
+    while (iterator.hasNext()) {
+        builder.append(separator)
+        builder.append(iterator.next())
+    }
+
+    return builder.build()
+}
+
+/**
+ * MiniMessage helper
+ */
+fun String.miniMessage() = miniMessage
     .deserialize(this)
-    .decoration(TextDecoration.ITALIC, false) as TextComponent
+    .decoration(TextDecoration.ITALIC, false)
 
 //endregion
 
@@ -552,14 +668,24 @@ fun Double.toRadians() = Math.toRadians(this)
 fun Double.toDegrees() = Math.toDegrees(this)
 
 /**
- * Makes a random number in a range
+ * Returns a random number in a range
  *
  * @param min Minimum number
  * @param max Maximum number
  * @return Random number in a range
  */
-fun randomRange(min: Int, max: Int) = if(max <= min) min else
-    random.nextInt(max - min + 1) + min
+@Suppress("NOTHING_TO_INLINE")
+inline fun randomRange(min: Int, max: Int): Int {
+    if (max <= min) return min
+
+    return if (max < Int.MAX_VALUE) {
+        random.nextInt(min, max + 1)
+    } else if (min > Int.MIN_VALUE) {
+        random.nextInt(min - 1, max) + 1
+    } else {
+        random.nextInt()
+    }
+}
 
 /**
  * Splits string into list of strings
@@ -576,7 +702,7 @@ fun String.splitLines(maxLength: Int = 16): List<String> {
         segment.add(w)
 
         length += w.length + 1
-        if(length > maxLength){
+        if (length > maxLength) {
             length = 0
 
             result.add(segment.joinToString(" "))
@@ -631,24 +757,11 @@ fun getRandomString(length: Int): String {
 }
 
 /**
- * Limits the number
- *
- * @param min Minimum number
- * @param max Maximum number
- * @return Clipped number
- */
-fun <T: Comparable<T>> T.clip(min: T, max: T): T {
-    if(this < min) return min
-    if(this > max) return max
-
-    return this
-}
-/**
  * Divide and modulate two numbers
  *
  * @param a Number to be divided and modulated
  * @param b Number to divide and modulate
- * @return Pair of divmod
+ * @return Pair of Divmod
  */
 fun divmod(a: Int, b: Int) = a / b to a % b
 
@@ -656,7 +769,7 @@ fun divmod(a: Int, b: Int) = a / b to a % b
  * Convert string to minutes and seconds
  *
  * @param time Time String ("2:75" = Pair(3, 15))
- * @return Pair of minutes and seconds
+ * @return Pair of Minutes and Seconds
  */
 fun convertToTime(time: String): Pair<Int, Int> {
     assert(time.count { it == ':' } == 1)
@@ -679,10 +792,23 @@ fun convertToTime(time: String): Pair<Int, Int> {
  *
  * @return 1 or -1
  */
-fun Boolean.sign() = if(this) 1 else -1
-fun Int.sign() = if(this > 0) 1 else -1
+fun Boolean.sign() = if (this) 1 else -1
 
-fun Boolean.toInt() = if(this) 1 else 0
+/**
+ * x > 0: 1
+ * x <= 0: -1
+ *
+ * @return 1 or -1
+ */
+fun Int.sign() = if (this > 0) 1 else -1
+
+/**
+ * If true, returns 1
+ * If false, returns 0
+ *
+ * @return 1 or 0
+ */
+fun Boolean.toInt() = if (this) 1 else 0
 
 /**
  * Reflects number
@@ -692,7 +818,12 @@ fun Boolean.toInt() = if(this) 1 else 0
  */
 fun Double.splitHalf(c: Double) = if(this > c) c * 2 - this else this
 
-
+/**
+ * Check if the number is prime or not
+ *
+ * @param n Number
+ * @return Is Prime
+ */
 fun isPrime(n: Int): Boolean {
     if (n < 2) return false
     if (n < 4) return true
@@ -708,25 +839,32 @@ fun isPrime(n: Int): Boolean {
     return true
 }
 
+/**
+ * Normalize and return original length
+ *
+ * @return Length Before Normalization
+ */
 fun Vector.normalizeWithLength(): Double {
     val square = (x * x + y * y + z * z).toFloat()
     if (square == 0f) return 0.0
 
     val rsqrt = 1.0f / sqrt(square)
-
     x *= rsqrt
     y *= rsqrt
     z *= rsqrt
 
     return (square * rsqrt).toDouble()
 }
-
+/**
+ * Normalize and return itself
+ *
+ * @return Vector After Normalization
+ */
 fun Vector.fastNormalize(): Vector {
     val square = (x * x + y * y + z * z).toFloat()
     if (square == 0f) return this
 
     val rsqrt = 1.0f / sqrt(square)
-
     x *= rsqrt
     y *= rsqrt
     z *= rsqrt
@@ -734,6 +872,13 @@ fun Vector.fastNormalize(): Vector {
     return this
 }
 
+/**
+ * Min to Max
+ *
+ * @param a Number
+ * @param b Number
+ * @return Minimum to Maximum
+ */
 fun <T: Comparable<T>> minmax(a: T, b: T) = if(a < b) a to b else b to a
 
 //endregion
@@ -828,6 +973,9 @@ fun Location.spawnParticle(type: Particle, amount: Int, speed: Double, range: Do
 val Player.isDamageable
     get() = gameMode == GameMode.SURVIVAL || gameMode == GameMode.ADVENTURE
 
+/**
+ * If player is on ground, returns true
+ */
 val Player.onGround: Boolean
     get() = (this as Entity).isOnGround
 
@@ -852,7 +1000,7 @@ fun Location.getNearestPlayer(
  *
  * @param excepts Filter
  * @param exceptTypes Filter Entity Type
- * @return Nearest living entity
+ * @return Nearest Living Entity
  */
 fun LivingEntity.getNearestLivingEntity(
     excepts: List<LivingEntity> = listOf(),
@@ -869,7 +1017,7 @@ fun LivingEntity.getNearestLivingEntity(
  * Plays firework effect
  *
  * @param location Location
- * @param effect Firework effect
+ * @param effect Firework Effect
  * @param pw Power
  */
 fun World.playFirework(
@@ -895,7 +1043,7 @@ fun World.playFirework(
 fun Inventory.removeMaterial(type: Material, count: Int) {
     var remaining = count
 
-    for(i in size - 1 downTo 0){
+    for (i in size - 1 downTo 0) {
         val item = getItem(i) ?: continue
         if (item.type != type) continue
 
@@ -914,15 +1062,21 @@ fun Inventory.removeMaterial(type: Material, count: Int) {
  * @return Amount of material
  */
 fun Inventory.countMaterial(type: Material) = contents.sumOf {
-    if(it?.type == type) it.amount else 0
-}
-
-fun Inventory.fill(itemStack: ItemStack) {
-    contents = Array(size) { itemStack }
+    if (it?.type == type) it.amount else 0
 }
 
 /**
- * Fills only empty slots, then returns slots already existing
+ * Fills inventory with an ItemStack
+ *
+ * @param itemStack ItemStack to be filled
+ */
+fun Inventory.fill(itemStack: ItemStack) {
+    contents = Array(size) { itemStack.clone() }
+}
+
+/**
+ * Fills only empty slots, then returns not empty slots
+ *
  * @param itemStack: Item to fill
  * @return Slots not Empty
  */
@@ -937,14 +1091,21 @@ fun Inventory.fillEmpty(itemStack: ItemStack): List<Int> {
     return notEmpty
 }
 
+/**
+ * Adds item to player inventory
+ *
+ * @param itemStack ItemStack
+ * @param silent Is Silent
+ * @return Added Slot. If failed, -1
+ */
 fun PlayerInventory.addItem(itemStack: ItemStack, silent: Boolean): Int {
-    if(!silent) {
+    if (!silent) {
         addItem(itemStack)
         return -1
     }
 
-    for(i in 0 until size) getItem(i)?.let { item ->
-        if(i == heldItemSlot) continue
+    for (i in 0 until size) getItem(i)?.let { item ->
+        if (i == heldItemSlot) continue
 
         setItem(i, itemStack)
 
@@ -956,6 +1117,45 @@ fun PlayerInventory.addItem(itemStack: ItemStack, silent: Boolean): Int {
     }
 
     return -1
+}
+
+/**
+ * Give or drop item
+ *
+ * @param item ItemStack
+ */
+fun Player.giveOrDropItem(item: ItemStack) {
+    val leftover = inventory.addItem(item)
+    if (leftover.isEmpty()) return
+
+    leftover.values.forEach {
+        world.dropItemNaturally(location, it)
+    }
+}
+
+/**
+ * Returns remaining slot amount
+ *
+ * @param item ItemStack
+ * @return Available Spaces
+ */
+fun Inventory.getRemainingSpaceFor(item: ItemStack): Int {
+    var space = 0
+    val maxStack = item.maxStackSize
+
+    for (i in 0 until size) {
+        val current = getItem(i)
+
+        if (current == null || current.type == Material.AIR) {
+            space += maxStack
+            continue
+        }
+
+        if (!current.isSimilar(item)) continue
+        space += (maxStack - current.amount).coerceAtLeast(0)
+    }
+
+    return space
 }
 
 
@@ -1016,45 +1216,19 @@ fun World.spawnBlockDisplay(
 /**
  * Reset attributes
  */
-fun Player.resetAttributes(){
-    getAttribute(Attribute.ARMOR)?.baseValue = 0.0
-    getAttribute(Attribute.ARMOR_TOUGHNESS)?.baseValue = 0.0
-
-    getAttribute(Attribute.ATTACK_DAMAGE)?.baseValue = 1.0
-    getAttribute(Attribute.ATTACK_KNOCKBACK)?.baseValue = 0.0
-    getAttribute(Attribute.ATTACK_SPEED)?.baseValue = 4.0
-
-    getAttribute(Attribute.BLOCK_INTERACTION_RANGE)?.baseValue = 4.5
-    getAttribute(Attribute.ENTITY_INTERACTION_RANGE)?.baseValue = 3.0
-
-    getAttribute(Attribute.MOVEMENT_SPEED)?.baseValue = 0.1  // 0.10000000149011612
-    getAttribute(Attribute.JUMP_STRENGTH)?.baseValue = 0.42  // 0.41999998688697815
-    getAttribute(Attribute.SNEAKING_SPEED)?.baseValue = 0.3
-    getAttribute(Attribute.GRAVITY)?.baseValue = 0.08
-
-    getAttribute(Attribute.BLOCK_BREAK_SPEED)?.baseValue = 1.0
-
-    getAttribute(Attribute.BURNING_TIME)?.baseValue = 1.0
-    getAttribute(Attribute.OXYGEN_BONUS)?.baseValue = 0.0
-    getAttribute(Attribute.MAX_ABSORPTION)?.baseValue = 0.0
-    getAttribute(Attribute.MAX_HEALTH)?.baseValue = 20.0
-
-    getAttribute(Attribute.SCALE)?.baseValue = 1.0
-    getAttribute(Attribute.CAMERA_DISTANCE)?.baseValue = 4.0
-    getAttribute(Attribute.STEP_HEIGHT)?.baseValue = 0.6
-    getAttribute(Attribute.LUCK)?.baseValue = 0.0
-    getAttribute(Attribute.SAFE_FALL_DISTANCE)?.baseValue = 3.0
-
-    getAttribute(Attribute.MINING_EFFICIENCY)?.baseValue = 0.0
-    getAttribute(Attribute.MOVEMENT_EFFICIENCY)?.baseValue = 0.0
-    getAttribute(Attribute.WATER_MOVEMENT_EFFICIENCY)?.baseValue = 0.0
-
-    getAttribute(Attribute.EXPLOSION_KNOCKBACK_RESISTANCE)?.baseValue = 0.0
-    getAttribute(Attribute.KNOCKBACK_RESISTANCE)?.baseValue = 0.0
-    getAttribute(Attribute.FALL_DAMAGE_MULTIPLIER)?.baseValue = 1.0
-    getAttribute(Attribute.SWEEPING_DAMAGE_RATIO)?.baseValue = 0.0
+fun Player.clearAllAttributeModifiers() {
+    Registry.ATTRIBUTE.forEach { attribute ->
+        this.getAttribute(attribute)?.let { instance ->
+            instance.modifiers.forEach { modifier ->
+                instance.removeModifier(modifier)
+            }
+        }
+    }
 }
 
+/**
+ * Hides entity except for a certain player
+ */
 fun Entity.hideExcept(player: Player) {
     plugin.server.onlinePlayers.filter {
         it.uniqueId != player.uniqueId
@@ -1063,7 +1237,11 @@ fun Entity.hideExcept(player: Player) {
     }
 }
 
+/**
+ * Attribute Helper
+ */
 var LivingEntity.maximumHealth: Double
+    get() = getAttribute(Attribute.MAX_HEALTH)?.baseValue ?: 0.0
     set(hp) {
         getAttribute(Attribute.MAX_HEALTH)?.let {
             it.baseValue = hp
@@ -1071,14 +1249,22 @@ var LivingEntity.maximumHealth: Double
             if (this.health > hp) this.health = hp
         }
     }
-    get() = getAttribute(Attribute.MAX_HEALTH)?.baseValue ?: 0.0
 
+/**
+ * Attribute Helper
+ */
 val LivingEntity.attackDamage: Double
     get() = getAttribute(Attribute.ATTACK_DAMAGE)?.value ?: 0.0
 
+/**
+ * Attribute Helper
+ */
 val LivingEntity.attackSpeed: Double
     get() = getAttribute(Attribute.ATTACK_SPEED)?.value ?: 0.0
 
+/**
+ * Attribute Helper
+ */
 val LivingEntity.attackRange: Double
     get() = getAttribute(Attribute.ENTITY_INTERACTION_RANGE)?.value ?: 0.0
 
@@ -1087,18 +1273,28 @@ val LivingEntity.attackRange: Double
 
 //region LocationUtility
 
+/**
+ * Location to fixed point (0.5, 0.0, 0.5)
+ */
 fun Location.toEntityLocation() =
     Location(world, blockX + 0.5, blockY.toDouble(), blockZ + 0.5, yaw, pitch)
 
+/**
+ * If in air, down to ground
+ * If underground, up to air
+ *
+ * @param filter Materials to ignore
+ * @return Location on Ground
+ */
 fun Location.toGround(filter: List<Material> = listOf()): Location {
     val location = clone()
 
-    while((location.block.type.isAir || location.block.isPassable) || location.block.type in filter){
+    while ((location.block.type.isAir || location.block.isPassable) || location.block.type in filter) {
         if (location.y <= -64) break
 
         location.y -= 1
     }
-    while(!(location.block.type.isAir || location.block.isPassable) || location.block.type in filter){
+    while (!(location.block.type.isAir || location.block.isPassable) || location.block.type in filter) {
         if (location.y >= 312) break
 
         location.y += 1
@@ -1107,12 +1303,25 @@ fun Location.toGround(filter: List<Material> = listOf()): Location {
     return location
 }
 
+/**
+ * Distance 2D
+ *
+ * @param target Target Location
+ * @return Distance
+ */
 fun Location.distance2D(target: Location): Double {
     val dx = target.x - x
     val dz = target.z - z
 
     return sqrt(dx * dx + dz * dz)
 }
+
+/**
+ * Distance Squared 2D
+ *
+ * @param target Target Location
+ * @return Distance Squared
+ */
 fun Location.distanceSquared2D(target: Location): Double {
     val dx = target.x - x
     val dz = target.z - z
@@ -1120,6 +1329,12 @@ fun Location.distanceSquared2D(target: Location): Double {
     return dx * dx + dz * dz
 }
 
+/**
+ * Coerce in n
+ *
+ * @param n Number
+ * @return Vector After Clip
+ */
 fun Vector.clip(n: Double): Vector {
     x = if(n > 0) min(x, n) else max(x, n)
     y = if(n > 0) min(y, n) else max(y, n)
@@ -1128,6 +1343,12 @@ fun Vector.clip(n: Double): Vector {
     return this
 }
 
+/**
+ * Sign
+ *
+ * @param n Number
+ * @return Vector After Sign
+ */
 fun Vector.sign(n: Double = 1.0): Vector {
     val e = Vector.getEpsilon()
 
@@ -1138,10 +1359,22 @@ fun Vector.sign(n: Double = 1.0): Vector {
     return this
 }
 
+/**
+ * Reflect by surface vector
+ *
+ * @param n Surface Vector
+ * @return Vector After Reflection
+ */
 fun Vector.reflect(n: Vector) =
     subtract(clone().multiply(n).multiply(n).multiply(2.0))
 
-fun getSurfaceVector(face: BlockFace) = when(face){
+/**
+ * Surface vector by BlockFace
+ *
+ * @param face BlockFace
+ * @return Surface Vector
+ */
+fun getSurfaceVector(face: BlockFace) = when(face) {
     BlockFace.EAST -> Vector(1.0, 0.0, 0.0)
     BlockFace.WEST -> Vector(-1.0, 0.0, 0.0)
     BlockFace.NORTH -> Vector(0.0, 0.0, -1.0)
@@ -1152,6 +1385,11 @@ fun getSurfaceVector(face: BlockFace) = when(face){
     else -> Vector(0.0, 0.0, 0.0)
 }
 
+/**
+ * Vector to absolute value
+ *
+ * @return Vector after Abs
+ */
 fun Vector.abs(): Vector {
     x = x.absoluteValue
     y = y.absoluteValue
@@ -1160,19 +1398,56 @@ fun Vector.abs(): Vector {
     return this
 }
 
+/**
+ * Sum of x y z
+ *
+ * @return Sum
+ */
 fun Vector.sum() = x + y + z
 
+/**
+ * Operation Helper
+ *
+ * @param n Double
+ * @return Vector After Multiplication
+ */
 operator fun Vector.times(n: Double) = Vector(x * n, y * n, z * n)
+
+/**
+ * Operation Helper
+ *
+ * @param n Double
+ * @return Vector After Division
+ */
 operator fun Vector.div(n: Double) = Vector(x / n, y / n, z / n)
 
+/**
+ * Look at target location
+ *
+ * @param to Target Location
+ * @return Itself
+ */
 fun Location.lookAt(to: Location): Location {
     direction = to.clone().subtract(this).toVector()
 
     return this
 }
 
+/**
+ * Vector to target location
+ *
+ * @param to Target Location
+ * @return Directional Vector
+ */
 fun Location.directionTo(to: Location) = to.clone().subtract(this).toVector()
 
+/**
+ * Wiggle Orientation
+ *
+ * @param yawAmplitude Amplitude
+ * @param pitchAmplitude Amplitude
+ * @return Location After Wiggle
+ */
 fun Location.wiggleOrientation(yawAmplitude: Float, pitchAmplitude: Float): Location {
     this.yaw += random.nextFloat() * abs(yawAmplitude) * 2 - abs(yawAmplitude)
     this.pitch += random.nextFloat() * abs(pitchAmplitude) * 2 - abs(pitchAmplitude)
@@ -1180,6 +1455,12 @@ fun Location.wiggleOrientation(yawAmplitude: Float, pitchAmplitude: Float): Loca
     return this
 }
 
+/**
+ * Clones target location
+ *
+ * @param target Target Location
+ * @return Location after Clone
+ */
 fun Location.clone(target: Location): Location {
     this.world = target.world
 
@@ -1194,7 +1475,7 @@ fun Location.clone(target: Location): Location {
 }
 
 /**
- * For 1.19.4 Vector3f
+ * To Vector3f
  *
  * @return Vector3f
  */
@@ -1202,6 +1483,7 @@ fun Vector.toFloat() = Vector3f(x.toFloat(), y.toFloat(), z.toFloat())
 
 /**
  * Direction to yaw and pitch
+ *
  * @return yaw to pitch
  */
 fun Vector.toYawPitch(): Pair<Float, Float> {
@@ -1221,6 +1503,13 @@ fun Vector.toYawPitch(): Pair<Float, Float> {
     return yaw.toFloat() to pitch.toFloat()
 }
 
+/**
+ * Yaw and Pitch to Vector
+ *
+ * @param yaw Yaw
+ * @param pitch Pitch
+ * @return Directional Vector
+ */
 fun getDirection(yaw: Float, pitch: Float): Vector {
     val xz = cos(pitch)
 
@@ -1231,6 +1520,11 @@ fun getDirection(yaw: Float, pitch: Float): Vector {
     )
 }
 
+/**
+ * Right Vector
+ *
+ * @return Right Vector
+ */
 fun Location.getRightVector(): Vector {
     val x = cos(yaw.toDouble().toRadians())
     val z = sin(yaw.toDouble().toRadians())
@@ -1238,11 +1532,32 @@ fun Location.getRightVector(): Vector {
     return Vector(-x, 0.0, -z).fastNormalize()
 }
 
+/**
+ * Up Vector
+ *
+ * @return Up Vector
+ */
 fun Location.getUpVector(): Vector {
     val xz = getDirection()
     val right = getRightVector()
 
     return xz.crossProduct(right).multiply(-1).fastNormalize()
+}
+
+/**
+ * Minecraft's ^ ^ ^ teleportation
+ *
+ * @param forward Offset
+ * @param right Offset
+ * @param up Offset
+ * @return Location After Local Offset
+ */
+fun Location.addLocalOffset(forward: Double, right: Double, up: Double): Location {
+    val directionVector = this.direction.clone().fastNormalize()
+    val rightVector = this.getRightVector()
+    val upVector = this.getUpVector()
+
+    return this.clone().add(directionVector * forward).add(rightVector * right).add(upVector * up)
 }
 
 /**
@@ -1321,7 +1636,7 @@ fun <T> Iterable<T>.random(exclude: Iterable<T>) =
  * @return MutableList of random elements
  */
 fun <T> MutableList<T>.randomBatch(n: Int) =
-    mutableListOf(shuffled().slice(0 until n))
+    shuffled().take(n).toMutableList()
 
 /**
  * Returns a flattened array of matrix values from hash map
@@ -1337,36 +1652,72 @@ fun <T, V> HashMap<V, Iterable<T>>.flattenValue(filter: List<V> = listOf()): Mut
     return list
 }
 
+/**
+ * Random Match
+ *
+ * @return Randomly Matched Pair List
+ */
 fun <T> List<T>.randomMatch(): List<Pair<T, T>> {
     val list = shuffled()
 
     return list.mapIndexed { i, t -> t to list[(i + 1) % size] }
 }
 
+/**
+ * Adds then returns itself
+ *
+ * @param value Value to insert
+ * @return Itself
+ */
 fun <T> MutableList<T>.insert(value: T): MutableList<T> {
     add(value)
 
     return this
 }
 
+/**
+ * Adds then returns itself
+ *
+ * @param index Insertion Index
+ * @param value Value to insert
+ * @return Itself
+ */
 fun <T> MutableList<T>.insert(index: Int, value: T): MutableList<T> {
     add(index, value)
 
     return this
 }
 
+/**
+ * Adds then returns itself
+ *
+ * @param values Values to insert
+ * @return Itself
+ */
 fun <T> MutableList<T>.insertAll(vararg values: T): MutableList<T> {
     addAll(values)
 
     return this
 }
 
+/**
+ * Adds then returns itself
+ *
+ * @param values Values to insert
+ * @return Itself
+ */
 fun <T> MutableList<T>.insertAll(values: Iterable<T>): MutableList<T> {
     addAll(values)
 
     return this
 }
 
+/**
+ * maxBy with multiple results
+ *
+ * @param selector Selector
+ * @return Maximums
+ */
 inline fun <T, R : Comparable<R>> Iterable<T>.maxsBy(selector: (T) -> R): List<T> {
     val iterator = iterator()
     if (!iterator.hasNext()) return emptyList()
@@ -1394,6 +1745,12 @@ inline fun <T, R : Comparable<R>> Iterable<T>.maxsBy(selector: (T) -> R): List<T
     return result
 }
 
+/**
+ * minBy with multiple results
+ *
+ * @param selector Selector
+ * @return Minimums
+ */
 inline fun <T, R : Comparable<R>> Iterable<T>.minsBy(selector: (T) -> R): List<T> {
     val iterator = iterator()
     if (!iterator.hasNext()) return emptyList()
@@ -1421,25 +1778,45 @@ inline fun <T, R : Comparable<R>> Iterable<T>.minsBy(selector: (T) -> R): List<T
     return result
 }
 
-
+/**
+ * For loop forEach
+ *
+ * @param action Callback
+ */
 inline fun <T> List<T>.fastForEach(action: (T) -> Unit) {
     for (i in 0..lastIndex) {
         action(this[i])
     }
 }
 
+/**
+ * For Loop forEachIndexed
+ *
+ * @param action Callback
+ */
 inline fun <T> List<T>.fastForEachIndexed(action: (index: Int, T) -> Unit) {
     for (i in 0..lastIndex) {
         action(i, this[i])
     }
 }
 
+/**
+ * Reversed For Loop forEach
+ *
+ * @param action Callback
+ */
 inline fun <T> List<T>.fastForEachReversed(action: (T) -> Unit) {
     for (i in lastIndex downTo 0) {
         action(this[i])
     }
 }
 
+/**
+ * For Loop firstOrNull
+ *
+ * @param predicate Callback
+ * @return First Found or null
+ */
 inline fun <T> List<T>.fastFirstOrNull(predicate: (T) -> Boolean): T? {
     for (i in 0..lastIndex) {
         val item = this[i]
@@ -1450,6 +1827,12 @@ inline fun <T> List<T>.fastFirstOrNull(predicate: (T) -> Boolean): T? {
     return null
 }
 
+/**
+ * For Loop any
+ *
+ * @param predicate Callback
+ * @return If any is true
+ */
 inline fun <T> List<T>.fastAny(predicate: (T) -> Boolean): Boolean {
     for (i in 0..lastIndex) {
         if (predicate(this[i])) return true
@@ -1458,6 +1841,11 @@ inline fun <T> List<T>.fastAny(predicate: (T) -> Boolean): Boolean {
     return false
 }
 
+/**
+ * For Loop removeIf
+ *
+ * @param predicate Callback
+ */
 inline fun <T> MutableList<T>.fastRemoveIf(predicate: (T) -> Boolean) {
     var writeIndex = 0
 
@@ -1479,6 +1867,9 @@ inline fun <T> MutableList<T>.fastRemoveIf(predicate: (T) -> Boolean) {
 
 //region Event
 
+/**
+ * Cancels PlayerDeathEvent with death message
+ */
 fun PlayerDeathEvent.cancel() {
     isCancelled = true
     deathMessage()?.let(Bukkit::broadcast)
@@ -1511,6 +1902,12 @@ fun Display.animate(
 
 //region Config
 
+/**
+ * Creates config file
+ *
+ * @param instance Java Plugin
+ * @return Config File Created or not
+ */
 fun createConfigFile(instance: JavaPlugin): Boolean {
     val file = File(
         instance.dataFolder.toString() + File.separator + "config.yml"
@@ -1535,6 +1932,13 @@ fun createConfigFile(instance: JavaPlugin): Boolean {
 
 //region Dialog
 
+/**
+ * Notice Dialog
+ *
+ * @param title Title
+ * @param body Contents
+ * @return Dialog
+ */
 fun NoticeDialog(
     title: TextComponent,
     body: Iterable<TextComponent>
@@ -1546,6 +1950,14 @@ fun NoticeDialog(
     ).type(DialogType.notice())
 }
 
+/**
+ * Multi Dialog
+ *
+ * @param title Title
+ * @param body Contents
+ * @param dialogs Dialogs
+ * @return Dialog
+ */
 fun MultiDialog(
     title: TextComponent,
     body: Iterable<TextComponent>,
@@ -1561,6 +1973,14 @@ fun MultiDialog(
     )).build())
 }
 
+/**
+ * Action Dialog
+ *
+ * @param title Title
+ * @param body Contents
+ * @param actions Action Button Data
+ * @return Dialog
+ */
 fun ActionDialog(
     title: TextComponent,
     body: Iterable<TextComponent>,
@@ -1584,6 +2004,13 @@ fun ActionDialog(
     ).build())
 }
 
+/**
+ * Action Button Data Component
+ *
+ * @param name Name
+ * @param callback Callback
+ * @return ActionButtonData
+ */
 data class ActionButtonData(
     val name: TextComponent,
     val callback: (Player) -> Unit
@@ -1594,6 +2021,14 @@ data class ActionButtonData(
 
 //region Zycos
 
+/**
+ * Simple BossBar Timer
+ *
+ * @param name Name
+ * @param tick Ticks
+ * @param callback Callback when timer ends
+ * @return BossBar
+ */
 fun simpleTimer(name: TextComponent, tick: Int, callback: () -> Unit): BossBar {
     val bossBar = BossBar.bossBar(
         name,
@@ -1603,7 +2038,7 @@ fun simpleTimer(name: TextComponent, tick: Int, callback: () -> Unit): BossBar {
     )
 
     loop(tick) { i, _ ->
-        bossBar.progress((1.0 - i.toDouble() / tick).clip(0.0, 1.0).toFloat())
+        bossBar.progress((1.0 - i.toDouble() / tick).coerceIn(0.0, 1.0).toFloat())
     }
 
     later(tick) {
@@ -1614,8 +2049,25 @@ fun simpleTimer(name: TextComponent, tick: Int, callback: () -> Unit): BossBar {
     return bossBar
 }
 
+/**
+ * Location to AreaManager.Position
+ *
+ * @return Position
+ */
 fun Location.toPosition() = Position(blockX, blockY, blockZ)
+
+/**
+ * Vector to AreaManager.Position
+ *
+ * @return Position
+ */
 fun Vector.toPosition() = Position(blockX, blockY, blockZ)
+
+/**
+ * AreaManager.Area to List<Int>(6)
+ *
+ * @return List { startX, startY, startZ, endX, endY, endZ }
+ */
 fun AreaManager.Area.toList() = listOf(
     boundingBoxStart.x, boundingBoxStart.y, boundingBoxStart.z,
     boundingBoxEnd.x, boundingBoxEnd.y, boundingBoxEnd.z

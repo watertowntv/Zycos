@@ -13,25 +13,52 @@ import kotlin.coroutines.CoroutineContext
 
 
 object CoroutineManager {
-    private val scopeMap = ConcurrentHashMap<Plugin, CoroutineScope>()
+    private class PluginContext(val plugin: Plugin) {
+        val mainDispatcher = PaperDispatcher(plugin, async = false)
+        val asyncDispatcher = PaperDispatcher(plugin, async = true)
+        val mainScope = CoroutineScope(SupervisorJob() + mainDispatcher)
+        val asyncScope = CoroutineScope(SupervisorJob() + asyncDispatcher)
+    }
+
+    private val contextMap = ConcurrentHashMap<Plugin, PluginContext>()
 
     val Plugin.scope: CoroutineScope
-        get() = scopeMap.getOrPut(this) {
-            CoroutineScope(SupervisorJob() + PaperDispatcher(this))
-        }
+        get() = contextMap.getOrPut(this) {
+            PluginContext(this)
+        }.mainScope
+
+    val Plugin.asyncScope: CoroutineScope
+        get() = contextMap.getOrPut(this) {
+            PluginContext(this)
+        }.asyncScope
+
+    val Plugin.mainDispatcher: CoroutineDispatcher
+        get() = contextMap.getOrPut(this) {
+            PluginContext(this)
+        }.mainDispatcher
+
+    val Plugin.asyncDispatcher: CoroutineDispatcher
+        get() = contextMap.getOrPut(this) {
+            PluginContext(this)
+        }.asyncDispatcher
 
     fun cancel(plugin: Plugin) {
-        scopeMap.remove(plugin)?.cancel()
+        contextMap.remove(plugin)?.let {
+            it.mainScope.cancel()
+            it.asyncScope.cancel()
+        }
     }
 
     class PaperDispatcher(
-        private val plugin: Plugin
+        private val plugin: Plugin,
+        private val async: Boolean = false
     ) : CoroutineDispatcher() {
         override fun isDispatchNeeded(context: CoroutineContext) =
-            !Bukkit.isPrimaryThread()
+            if (async) Bukkit.isPrimaryThread() else !Bukkit.isPrimaryThread()
 
         override fun dispatch(context: CoroutineContext, block: Runnable) {
-            Main.plugin.server.scheduler.runTask(Main.plugin, block)
+            if (async) plugin.server.scheduler.runTaskAsynchronously(plugin, block)
+            else plugin.server.scheduler.runTask(plugin, block)
         }
     }
 }

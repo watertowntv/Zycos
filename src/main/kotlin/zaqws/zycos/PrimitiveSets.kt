@@ -10,8 +10,10 @@ class PrimitiveLongSet(initialCapacity: Int = 16) : Iterable<Long> {
     private var capacity = if (initialCapacity < 2) 2
     else Integer.highestOneBit(initialCapacity - 1) * 2
 
-    private var keys = LongArray(capacity)
-    private var containsZero = false
+    var keys = LongArray(capacity)
+        private set
+    var containsZero = false
+        private set
 
     private var threshold = (capacity * loadFactor).toInt()
     private var mask = capacity - 1
@@ -83,14 +85,14 @@ class PrimitiveLongSet(initialCapacity: Int = 16) : Iterable<Long> {
         return false
     }
 
-    override fun iterator(): Iterator<Long> = object : Iterator<Long> {
+    override fun iterator(): LongIterator = object : LongIterator() {
         var index = 0
         var zeroYielded = !containsZero
         var remaining = size
 
         override fun hasNext(): Boolean = remaining > 0
 
-        override fun next(): Long {
+        override fun nextLong(): Long {
             if (!hasNext()) throw NoSuchElementException()
             remaining--
 
@@ -110,7 +112,7 @@ class PrimitiveLongSet(initialCapacity: Int = 16) : Iterable<Long> {
         }
     }
 
-    fun forEach(action: (Long) -> Unit) {
+    inline fun forEach(action: (Long) -> Unit) {
         if (containsZero) action(0L)
 
         for (k in keys) if (k != 0L) action(k)
@@ -127,6 +129,26 @@ class PrimitiveLongSet(initialCapacity: Int = 16) : Iterable<Long> {
     fun isNotEmpty() = size != 0
 
     fun addAll(elements: LongArray) {
+        val requiredCapacity = size + elements.size
+
+        if (requiredCapacity >= threshold) {
+            val neededMinCapacity = (requiredCapacity / loadFactor).toInt() + 1
+            val newCapacity = Integer.highestOneBit(neededMinCapacity - 1) shl 1
+
+            if (newCapacity > capacity) {
+                val oldKeys = keys
+
+                capacity = newCapacity
+                threshold = (capacity * loadFactor).toInt()
+                keys = LongArray(capacity)
+                mask = capacity - 1
+
+                for (value in oldKeys) {
+                    if (value != 0L) rehash(value)
+                }
+            }
+        }
+
         for (item in elements) add(item)
     }
 
