@@ -184,6 +184,9 @@ class PathfindingManager {
         private var lastSnapshot: ChunkSnapshot? = null
         private val pathListCache = LongArrayList()
 
+        private val maxStepUp = 1
+        private val maxStepDown = 3
+
 
         private class PathNode(
             val positionRaw: Long,
@@ -240,7 +243,7 @@ class PathfindingManager {
                 val deltaX = deltaXOffsets[directionIndex]
                 val deltaZ = deltaZOffsets[directionIndex]
 
-                for (deltaY in 1 downTo -3) {
+                for (deltaY in maxStepUp downTo -maxStepDown) {
                     val targetPosition = AreaManager.Position(
                         current.x + deltaX,
                         current.y + deltaY,
@@ -846,7 +849,7 @@ class PathfindingManager {
 
             val mPath = macroPath
             val lastTarget = lastTargetLocation
-            val threshold = 1.0
+            val threshold = 1.5
 
             if ((mPath == null || mPath.isEmpty() || macroIndex >= mPath.size) &&
                 entity.location.distanceSquared(targetLocation) <= threshold &&
@@ -961,7 +964,8 @@ class PathfindingManager {
             val currentLocalPath = localPath ?: return
             val targetNodePosition = AreaManager.Position(currentLocalPath[localIndex])
 
-            if (currentPosition.distanceSquared2D(targetNodePosition) < 2.25 && abs(currentPosition.y - targetNodePosition.y) <= 1) {
+            if (entity.location.distanceSquared2D(targetNodePosition.toLocation()) < 2.25 &&
+                abs(currentPosition.y - targetNodePosition.y) <= 1) {
                 if (++localIndex >= currentLocalPath.size) navigateTo(targetLocation)
                 else triggerMove()
 
