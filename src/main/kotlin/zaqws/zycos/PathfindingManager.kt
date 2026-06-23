@@ -977,6 +977,12 @@ class PathfindingManager {
             }
         }
 
+        fun cancel() {
+            searchJob?.cancel()
+            localSearchJob?.cancel()
+        }
+
+
         private fun triggerMove() {
             val lPath = localPath ?: return
             if (localIndex >= lPath.size) return
