@@ -946,13 +946,36 @@ fun launchArrow(
  */
 fun LivingEntity.addPotion(
     effect: PotionEffectType,
-    amplifier: Int, 
-    duration: Int, 
+    amplifier: Int,
+    duration: Int,
     particle: Boolean = false
 ) {
     addPotionEffect(PotionEffect(
         effect,
         duration,
+        amplifier,
+        particle,
+        particle
+    ))
+}
+
+/**
+ * Add a potion effect to entity
+ *
+ * @parameffect Type
+ * @param amplifier Amplifier
+ * @param infiniteDuration Infinite
+ * @param particle Show a particle
+ */
+fun LivingEntity.addPotion(
+    effect: PotionEffectType,
+    amplifier: Int,
+    infiniteDuration: Boolean,
+    particle: Boolean = false
+) {
+    addPotionEffect(PotionEffect(
+        effect,
+        PotionEffect.INFINITE_DURATION,
         amplifier,
         particle,
         particle

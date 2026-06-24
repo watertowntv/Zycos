@@ -196,7 +196,12 @@ class PathfindingManager {
                 estimatedTotalCost.compareTo(other.estimatedTotalCost)
         }
 
-        fun findPath(start: AreaManager.Position, end: AreaManager.Position, area: AreaManager.Area): LongArray {
+        fun findPath(
+            start: AreaManager.Position,
+            end: AreaManager.Position,
+            area: AreaManager.Area,
+            maxNodes: Int = Int.MAX_VALUE
+        ): LongArray {
             if (start.raw == end.raw) return longArrayOf(start.raw)
             if (end !in area) return LongArray(0)
 
@@ -212,7 +217,10 @@ class PathfindingManager {
                 PathNode(start.raw, start.distance(end))
             )
 
+            var explored = 0
             while (openSet.isNotEmpty()) {
+                if (++explored > maxNodes) return LongArray(0)
+
                 val currentRecord = openSet.poll()
                 val currentRaw = currentRecord.positionRaw
 
@@ -666,7 +674,16 @@ class PathfindingManager {
             val localPathfinder = LocalPathfinder(chunkSnapshots)
 
             if (source.chunkX == target.chunkX && source.chunkZ == target.chunkZ) {
-                return@withContext longArrayOf(source.raw, target.raw)
+                val directPath = localPathfinder.findPath(
+                    source,
+                    target,
+                    grid.area,
+                    maxNodes = 256
+                )
+
+                if (directPath.isNotEmpty()) {
+                    return@withContext longArrayOf(source.raw, target.raw)
+                }
             }
 
             grid.hierarchicalLock.readLock().lock()
