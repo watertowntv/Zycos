@@ -670,7 +670,6 @@ class PathfindingManager {
         ): LongArray = withContext(Dispatchers.Default) {
             if (source.raw == target.raw) return@withContext longArrayOf(source.raw)
             if (target !in grid.area) return@withContext LongArray(0)
-
             val localPathfinder = LocalPathfinder(chunkSnapshots)
 
             if (source.chunkX == target.chunkX && source.chunkZ == target.chunkZ) {
@@ -897,8 +896,8 @@ class PathfindingManager {
                     val currentChunkX = entity.location.blockX shr 4
                     val currentChunkZ = entity.location.blockZ shr 4
                     val currentChunkKey = getChunkKey(currentChunkX, currentChunkZ)
-                    val nextNodePos = AreaManager.Position(currentMacroPath[macroIndex + 1])
-                    val nextChunkKey = getChunkKey(nextNodePos.chunkX, nextNodePos.chunkZ)
+                    val nextNodePosition = AreaManager.Position(currentMacroPath[macroIndex + 1])
+                    val nextChunkKey = getChunkKey(nextNodePosition.chunkX, nextNodePosition.chunkZ)
 
                     val cached = latestSnapshots
                     val snapshots = if (cached != null && cached.containsKey(currentChunkKey) && cached.containsKey(nextChunkKey)) {
@@ -928,14 +927,15 @@ class PathfindingManager {
                         return
                     }
 
-                    val currentPos = entity.location.toPosition()
-                    val targetNodePos = AreaManager.Position(currentMacroPath[macroIndex + 1])
+                    val currentPosition = entity.location.toPosition()
+                    val targetNodePosition = AreaManager.Position(currentMacroPath[macroIndex + 1])
+
                     isCalculatingLocalPath = true
                     localSearchJob?.cancel()
 
                     localSearchJob = scope.launch {
                         val generated = withContext(Dispatchers.Default) {
-                            pathfinder.findPath(currentPos, targetNodePos, hierarchicalGrid.area)
+                            pathfinder.findPath(currentPosition, targetNodePosition, hierarchicalGrid.area)
                         }
 
                         sync {
