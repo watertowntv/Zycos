@@ -2,6 +2,7 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
     java
+    `java-library`
     kotlin("jvm") version "2.4.0"
 
     id("com.gradleup.shadow") version "9.4.2"
@@ -31,6 +32,8 @@ dependencies {
 }
 
 java {
+    withSourcesJar()
+
     toolchain.languageVersion.set(JavaLanguageVersion.of(25))
 }
 

@@ -571,6 +571,44 @@ fun Sound.play(location: Location) {
 /**
  * Play Sound
  *
+ * @param player Player
+ */
+fun Sound.play(player: Player) {
+    Audience.audience(player).playSound(this)
+}
+
+/**
+ * Play Sound as Player
+ *
+ * @param player Player
+ * @param follow Follows Player
+ */
+fun Sound.play(player: Player, follow: Boolean) {
+    if (follow) Audience.audience(player).playSound(this, Sound.Emitter.self())
+    else Audience.audience(player).playSound(this)
+}
+
+/**
+ * Play Sound as Entity
+ *
+ * @param entity Entity
+ */
+fun Sound.play(entity: Entity) {
+    Audience.audience(onlinePlayers).playSound(this, entity)
+}
+
+/**
+ * Play Sound
+ *
+ * @param players Players
+ */
+fun Sound.play(players: Iterable<Player>) {
+    Audience.audience(players).playSound(this)
+}
+
+/**
+ * Play Sound
+ *
  * @param location Location
  * @param minVolume Minimum Volume in Maximum Distance
  * @param maxDist Maximum Distance
@@ -2176,7 +2214,7 @@ fun <T : ArgumentBuilder<CommandSourceStack, T>, R : Any> T.argument(
     builder: RequiredArgumentBuilder<CommandSourceStack, R>.() -> Unit
 ): T = this.then(Commands.argument(name, type).apply(builder))
 
-fun <T : ArgumentBuilder<CommandSourceStack, T>, R : Any> T.argument(
+fun <T : ArgumentBuilder<CommandSourceStack, T>, R : Any> T.argumentLeaf(
     name: String,
     type: ArgumentType<R>,
     suggest: ((CommandContext<CommandSourceStack>) -> Collection<String>)? = null,
