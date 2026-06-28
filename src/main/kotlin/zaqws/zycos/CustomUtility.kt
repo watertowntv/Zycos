@@ -639,7 +639,7 @@ fun Sound.play(
  * Clears message history
  */
 fun Player.clearMessage() {
-    val empty = text("")
+    val empty = Component.text()
 
     for (i in 0..100) {
         sendMessage(empty)
@@ -651,8 +651,9 @@ fun Player.clearMessage() {
  * @param text String message
  * @param color Text color
  */
-fun text(text: String = "", color: NamedTextColor = NamedTextColor.WHITE) =
-    Component.text(text, color)
+fun text(text: String = "", color: NamedTextColor = NamedTextColor.WHITE, decorations: Collection<TextDecoration> = emptySet()) =
+    if (decorations.isEmpty()) Component.text(text, color)
+    else Component.text(text, color, decorations.toSet())
 
 /**
  * Append TextComponent
@@ -1341,6 +1342,22 @@ val LivingEntity.attackSpeed: Double
  */
 val LivingEntity.attackRange: Double
     get() = getAttribute(Attribute.ENTITY_INTERACTION_RANGE)?.value ?: 0.0
+
+/**
+ * Audience Helper
+ *
+ * @param entity Entity
+ * @return Audience
+ */
+fun audience(entity: Entity) = Audience.audience(entity)
+
+/**
+ * Audience Helper
+ *
+ * @param entities Entities
+ * @return Audiences
+ */
+fun audience(entities: Iterable<Entity>) = Audience.audience(entities)
 
 //endregion
 
