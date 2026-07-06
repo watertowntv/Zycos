@@ -27,10 +27,9 @@ dependencies {
     compileOnly("org.junit.jupiter:junit-jupiter:6.1.0")
     compileOnly("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.11.0")
 
-    compileOnly("io.papermc.paper:paper-api:26.1.2.build.+")
-    implementation("net.kyori:adventure-api:5.2.0")
+    compileOnly("io.papermc.paper:paper-api:26.2.build.+")
 
-    paperweight.paperDevBundle("26.1.2.build.+")
+    paperweight.paperDevBundle("26.2.build.+")
 }
 
 java {
