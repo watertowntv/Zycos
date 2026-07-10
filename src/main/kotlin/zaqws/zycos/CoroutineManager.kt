@@ -13,7 +13,7 @@ import kotlin.coroutines.CoroutineContext
 
 
 object CoroutineManager {
-    private class PluginContext(val plugin: Plugin) {
+    private class PluginContext(plugin: Plugin) {
         val mainDispatcher = PaperDispatcher(plugin, async = false)
         val asyncDispatcher = PaperDispatcher(plugin, async = true)
         val mainScope = CoroutineScope(SupervisorJob() + mainDispatcher)
@@ -54,7 +54,7 @@ object CoroutineManager {
         private val async: Boolean = false
     ) : CoroutineDispatcher() {
         override fun isDispatchNeeded(context: CoroutineContext) =
-            if (async) Bukkit.isPrimaryThread() else !Bukkit.isPrimaryThread()
+            if (async) true else !Bukkit.isPrimaryThread()
 
         override fun dispatch(context: CoroutineContext, block: Runnable) {
             if (async) plugin.server.scheduler.runTaskAsynchronously(plugin, block)
