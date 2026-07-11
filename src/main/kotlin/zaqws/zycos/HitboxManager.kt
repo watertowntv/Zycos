@@ -376,7 +376,6 @@ class HitboxManager(
         private val maxHistoryTicks: Int
     ) {
         private val history = Array(maxHistoryTicks) { HistoricalHitbox() }
-        private var writeIndex = 0
 
         fun record(tick: Long, player: Player) {
             val x = player.x
@@ -386,7 +385,8 @@ class HitboxManager(
             val halfWidth = player.width / 2.0
             val height = player.height
 
-            history[writeIndex].update(
+            val index = (tick % maxHistoryTicks).toInt()
+            history[index].update(
                 tick,
                 x - halfWidth,
                 y,
@@ -395,22 +395,14 @@ class HitboxManager(
                 y + height,
                 z + halfWidth
             )
-            writeIndex = (writeIndex + 1) % maxHistoryTicks
         }
 
         fun getAtTick(targetTick: Long): HistoricalHitbox? {
-            val newestEntry = history[(writeIndex - 1 + maxHistoryTicks) % maxHistoryTicks]
-            val newestTick = newestEntry.serverTick
-
-            val oldestEntry = history[writeIndex]
-            val oldestTick = if (oldestEntry.serverTick == 0L) history[0].serverTick else oldestEntry.serverTick
-
-            if (targetTick !in oldestTick..newestTick) return null
-
             var index = (targetTick % maxHistoryTicks).toInt()
             if (index < 0) index += maxHistoryTicks
 
             val entry = history[index]
+
             return if (entry.serverTick == targetTick) entry else null
         }
     }
