@@ -36,30 +36,15 @@ import net.kyori.adventure.text.event.ClickEvent
 import net.kyori.adventure.text.event.HoverEvent
 import net.kyori.adventure.text.format.NamedTextColor
 import net.kyori.adventure.text.format.TextDecoration
-import net.kyori.adventure.text.minimessage.MiniMessage
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import net.kyori.adventure.title.Title
 import net.kyori.adventure.title.Title.Times
-import org.bukkit.Bukkit
-import org.bukkit.Color
-import org.bukkit.FireworkEffect
-import org.bukkit.GameMode
-import org.bukkit.Location
-import org.bukkit.Material
-import org.bukkit.Particle
-import org.bukkit.Registry
-import org.bukkit.World
+import org.bukkit.*
 import org.bukkit.attribute.Attribute
 import org.bukkit.block.BlockFace
 import org.bukkit.block.data.BlockData
 import org.bukkit.enchantments.Enchantment
-import org.bukkit.entity.BlockDisplay
-import org.bukkit.entity.Display
-import org.bukkit.entity.Entity
-import org.bukkit.entity.EntityType
-import org.bukkit.entity.Firework
-import org.bukkit.entity.LivingEntity
-import org.bukkit.entity.Player
+import org.bukkit.entity.*
 import org.bukkit.event.entity.PlayerDeathEvent
 import org.bukkit.inventory.Inventory
 import org.bukkit.inventory.ItemStack
@@ -75,22 +60,8 @@ import org.joml.Vector3f
 import zaqws.zycos.AreaManager.Position
 import zaqws.zycos.Main.Companion.plugin
 import java.io.File
-import java.security.SecureRandom
 import java.time.Duration
 import kotlin.math.*
-import kotlin.random.Random
-
-
-//region GlobalVariables
-
-val random = Random
-val secureRandom = SecureRandom()
-val overworld: World = Bukkit.getWorlds().first()
-val onlinePlayers: Collection<Player>
-    get() = Bukkit.getOnlinePlayers()
-val miniMessage = MiniMessage.miniMessage()
-
-//endregion
 
 
 //region ItemUtility

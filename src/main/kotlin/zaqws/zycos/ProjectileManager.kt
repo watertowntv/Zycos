@@ -9,8 +9,6 @@ import org.bukkit.util.Vector
 
 class ProjectileManager(private val plugin: JavaPlugin) {
     private val projectiles = mutableListOf<SyncedProjectile>()
-    private val addQueue = ArrayDeque<SyncedProjectile>()
-    private var isUpdating = false
 
     init {
         plugin.server.scheduler.runTaskTimer(
@@ -33,23 +31,17 @@ class ProjectileManager(private val plugin: JavaPlugin) {
 
         projectile.initialize()
 
-        if (isUpdating) addQueue.add(projectile) else projectiles.add(projectile)
+        projectiles.add(projectile)
     }
 
     private fun update() {
-        isUpdating = true
-
         val iterator = projectiles.iterator()
+
         while (iterator.hasNext()) {
             val projectile = iterator.next()
 
             projectile.update()
             if (projectile.removed) iterator.remove()
-        }
-
-        isUpdating = false
-        while (addQueue.isNotEmpty()) {
-            projectiles.add(addQueue.removeFirst())
         }
     }
 

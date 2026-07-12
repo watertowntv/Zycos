@@ -44,8 +44,8 @@ object AreaManager {
         val y: Int get() = (raw shl 52 shr 52).toInt()
         val z: Int get() = (raw shl 26 shr 38).toInt()
 
-        val chunkX: Int get() = x shr 4
-        val chunkZ: Int get() = z shr 4
+        val chunkX: Int get() = x shr Constants.CHUNK_SHIFT
+        val chunkZ: Int get() = z shr Constants.CHUNK_SHIFT
 
         operator fun plus(other: Position) = Position(
             x + other.x,
@@ -205,16 +205,16 @@ object AreaManager {
             val rangeY = boundingBoxStart.y..boundingBoxEnd.y
             val rangeZ = boundingBoxStart.z..boundingBoxEnd.z
 
-            val chunkRangeX = (rangeX.first shr 4)..(rangeX.last shr 4)
-            val chunkRangeZ = (rangeZ.first shr 4)..(rangeZ.last shr 4)
+            val chunkRangeX = (rangeX.first shr Constants.CHUNK_SHIFT)..(rangeX.last shr Constants.CHUNK_SHIFT)
+            val chunkRangeZ = (rangeZ.first shr Constants.CHUNK_SHIFT)..(rangeZ.last shr Constants.CHUNK_SHIFT)
 
             for(chunkX in chunkRangeX){
-                val chunkStartX = chunkX shl 4
+                val chunkStartX = chunkX shl Constants.CHUNK_SHIFT
                 val startX = max(rangeX.first, chunkStartX)
                 val endX = min(rangeX.last, chunkStartX + 15)
 
                 for(chunkZ in chunkRangeZ){
-                    val chunkStartZ = chunkZ shl 4
+                    val chunkStartZ = chunkZ shl Constants.CHUNK_SHIFT
                     val startZ = max(rangeZ.first, chunkStartZ)
                     val endZ = min(rangeZ.last, chunkStartZ + 15)
 

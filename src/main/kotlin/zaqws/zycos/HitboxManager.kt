@@ -29,9 +29,7 @@ class HitboxManager(
         private const val DEFAULT_MAX_HISTORY_TICKS = 10
         private const val TASK_DELAY = 0L
         private const val TASK_PERIOD = 1L
-        private const val EPSILON = 1e-8
         private const val MILLISECONDS_PER_TICK = 50.0
-        private const val MAX_TICK_DIFFERENCE = 2L
         private const val CHUNK_SHIFT = 4
     }
 
@@ -48,7 +46,7 @@ class HitboxManager(
     }
 
     private fun update() {
-        val tick = currentTick++
+        val tick = ++currentTick
 
         for (entry in historyMap.object2ObjectEntrySet()) {
             val player = Bukkit.getPlayer(entry.key) ?: continue
@@ -82,7 +80,7 @@ class HitboxManager(
     }
 
 
-    fun hasPlayer(player: Player): Boolean {
+    operator fun contains(player: Player): Boolean {
         return historyMap.containsKey(player.uniqueId)
     }
 
@@ -126,13 +124,13 @@ class HitboxManager(
         val normalizedDirectionY: Double
         val normalizedDirectionZ: Double
 
-        if (abs(lengthSquared - 1.0) < EPSILON) {
+        if (abs(lengthSquared - 1.0) < Constants.EPSILON) {
             normalizedDirectionX = directionX
             normalizedDirectionY = directionY
             normalizedDirectionZ = directionZ
         } else {
             val length = sqrt(lengthSquared)
-            if (length < EPSILON) return blockHit
+            if (length < Constants.EPSILON) return blockHit
 
             val inverseLength = 1.0 / length
             normalizedDirectionX = directionX * inverseLength
@@ -169,8 +167,6 @@ class HitboxManager(
         var hitZ = 0.0
 
         for (player in world.players) {
-            if (player === shooter) continue
-            if (player.gameMode == GameMode.SPECTATOR || !player.isValid) continue
             if (entityFilter != null && !entityFilter.test(player)) continue
 
             val history = historyMap[player.uniqueId]
@@ -311,7 +307,7 @@ class HitboxManager(
             inflatedMaximumZ,
             currentMinimumDistance,
             currentMaximumDistance
-        ) { newMin, newMax ->
+        ) { newMin, _ ->
             currentMinimumDistance = newMin
         }) return null
 
@@ -327,7 +323,7 @@ class HitboxManager(
         currentMax: Double,
         onUpdate: (newMin: Double, newMax: Double) -> Unit
     ): Boolean {
-        if (abs(direction) < EPSILON) {
+        if (abs(direction) < Constants.EPSILON) {
             return start in inflatedMinimum..inflatedMaximum
         }
 
@@ -353,7 +349,7 @@ class HitboxManager(
 
 
     private class HistoricalHitbox {
-        var serverTick: Long = 0L
+        var tick: Long = 0L
         var minimumX: Double = 0.0
         var minimumY: Double = 0.0
         var minimumZ: Double = 0.0
@@ -362,7 +358,7 @@ class HitboxManager(
         var maximumZ: Double = 0.0
 
         fun update(tick: Long, minX: Double, minY: Double, minZ: Double, maxX: Double, maxY: Double, maxZ: Double) {
-            this.serverTick = tick
+            this.tick = tick
             this.minimumX = minX
             this.minimumY = minY
             this.minimumZ = minZ
@@ -403,7 +399,7 @@ class HitboxManager(
 
             val entry = history[index]
 
-            return if (entry.serverTick == targetTick) entry else null
+            return if (entry.tick == targetTick) entry else null
         }
     }
 }

@@ -302,8 +302,8 @@ class PathfindingManager {
         private fun getBlockMaterial(globalX: Int, globalY: Int, globalZ: Int): Material {
             if (globalY < -64 || globalY > 319) return Material.AIR
 
-            val chunkX = globalX shr 4
-            val chunkZ = globalZ shr 4
+            val chunkX = globalX shr Constants.CHUNK_SHIFT
+            val chunkZ = globalZ shr Constants.CHUNK_SHIFT
 
             val chunkKey = (chunkX.toLong() shl 32) or (chunkZ.toLong() and 0xFFFFFFFFL)
             var snapshot = lastSnapshot
@@ -640,7 +640,7 @@ class PathfindingManager {
         private fun getBlockMaterial(snapshots: Long2ObjectMap<ChunkSnapshot>, globalX: Int, globalY: Int, globalZ: Int): Material {
             if (globalY < -64 || globalY > 319) return Material.AIR
 
-            val chunkKey = getChunkKey(globalX shr 4, globalZ shr 4)
+            val chunkKey = getChunkKey(globalX shr Constants.CHUNK_SHIFT, globalZ shr Constants.CHUNK_SHIFT)
             val snapshot = snapshots.get(chunkKey) ?: return Material.AIR
 
             return snapshot.getBlockType(globalX and 15, globalY, globalZ and 15)
@@ -893,8 +893,8 @@ class PathfindingManager {
                 }
 
                 if (macroIndex < currentMacroPath.size - 1) {
-                    val currentChunkX = entity.location.blockX shr 4
-                    val currentChunkZ = entity.location.blockZ shr 4
+                    val currentChunkX = entity.location.blockX shr Constants.CHUNK_SHIFT
+                    val currentChunkZ = entity.location.blockZ shr Constants.CHUNK_SHIFT
                     val currentChunkKey = getChunkKey(currentChunkX, currentChunkZ)
                     val nextNodePosition = AreaManager.Position(currentMacroPath[macroIndex + 1])
                     val nextChunkKey = getChunkKey(nextNodePosition.chunkX, nextNodePosition.chunkZ)
