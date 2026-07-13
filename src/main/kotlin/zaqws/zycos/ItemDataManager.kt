@@ -54,7 +54,7 @@ class PersistentItemDataManager<T: PersistentItemDataManager.PersistentItemData>
         plugin.server.pluginManager.registerEvents(listener, plugin)
     }
 
-    fun initialize(item: ItemStack): T? {
+    fun initialize(item: ItemStack, factory: (() -> T)? = null): T? {
         if (item.isEmpty) return null
 
         if (item.persistentDataContainer.has(uuidKey, PersistentDataType.STRING)) {
@@ -63,7 +63,8 @@ class PersistentItemDataManager<T: PersistentItemDataManager.PersistentItemData>
             if (data != null) return data
         }
 
-        return createEntry(item, defaultFactory())
+        val data = factory?.invoke() ?: defaultFactory()
+        return createEntry(item, data)
     }
 
     @OptIn(ExperimentalSerializationApi::class)
