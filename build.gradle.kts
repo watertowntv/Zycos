@@ -4,6 +4,7 @@ plugins {
     java
     `java-library`
     kotlin("jvm") version "2.4.0"
+    kotlin("plugin.serialization") version "2.4.0"
 
     id("com.gradleup.shadow") version "9.4.2"
     id("io.papermc.paperweight.userdev") version "2.0.0-beta.21"
@@ -26,7 +27,7 @@ dependencies {
 
     compileOnly("org.junit.jupiter:junit-jupiter:6.1.0")
     compileOnly("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.11.0")
-    implementation("org.jetbrains.kotlinx:kotlinx-serialization-cbor:1.11.0")
+    compileOnly("org.jetbrains.kotlinx:kotlinx-serialization-cbor:1.11.0")
 
     compileOnly("io.papermc.paper:paper-api:26.2.build.+")
 
