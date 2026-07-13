@@ -28,6 +28,7 @@ class PersistentItemDataManager<T: PersistentItemDataManager.PersistentItemData>
     keyName: String,
     private val serializer: KSerializer<T>,
     private val defaultFactory: () -> T,
+    expireMinutes: Int = 30,
     strictListener: Boolean = false
 ) {
     private data class CacheEntry<T>(
@@ -35,7 +36,7 @@ class PersistentItemDataManager<T: PersistentItemDataManager.PersistentItemData>
         var version: Int
     )
     private val cache = CacheBuilder.newBuilder()
-        .expireAfterAccess(5.minutes.toJavaDuration())
+        .expireAfterAccess(expireMinutes.minutes.toJavaDuration())
         .build<UUID, CacheEntry<T>>()
 
     @OptIn(ExperimentalSerializationApi::class)
