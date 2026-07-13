@@ -43,9 +43,9 @@ class PersistentItemDataManager<T: PersistentItemDataManager.PersistentItemData>
 
     private val namespacedKey = keyName.lowercase().replace(Regex("[^a-z0-9/._-]"), "_")
 
-    private val uuidKey = NamespacedKey(plugin, "${namespacedKey.lowercase()}_uuid")
-    private val dataKey = NamespacedKey(plugin, "${namespacedKey.lowercase()}_data")
-    private val versionKey = NamespacedKey(plugin, "${namespacedKey.lowercase()}_version")
+    private val uuidKey = NamespacedKey(plugin, "${namespacedKey}_uuid")
+    private val dataKey = NamespacedKey(plugin, "${namespacedKey}_data")
+    private val versionKey = NamespacedKey(plugin, "${namespacedKey}_version")
 
     private val listener = PersistentItemDataListener(strictListener)
 
