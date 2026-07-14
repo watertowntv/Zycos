@@ -28,7 +28,7 @@ class PersistentItemDataManager<T: PersistentItemDataManager.PersistentItemData>
     keyName: String,
     private val serializer: KSerializer<T>,
     private val defaultFactory: () -> T,
-    expireMinutes: Int = 30,
+    expireMinutes: Int = 5,
     strictListener: Boolean = false
 ) {
     private data class CacheEntry<T>(
@@ -161,6 +161,16 @@ class PersistentItemDataManager<T: PersistentItemDataManager.PersistentItemData>
 
         if (unregister) {
             HandlerList.unregisterAll(listener)
+        }
+
+        saveAll()
+    }
+
+    fun saveAll() {
+        referenceCache.asMap().forEach { (item, entry) ->
+            if (item == null || item.isEmpty) return@forEach
+
+            save(item, entry.data)
         }
     }
 
