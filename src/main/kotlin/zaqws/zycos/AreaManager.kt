@@ -263,8 +263,8 @@ object AreaManager {
             }
         }
 
-        fun toArray(): LongArray {
-            var capacity = 1024
+        fun toArray(initialCapacity: Int = 1024): LongArray {
+            var capacity = initialCapacity.coerceAtLeast(8)
             var array = LongArray(capacity)
             var size = 0
 

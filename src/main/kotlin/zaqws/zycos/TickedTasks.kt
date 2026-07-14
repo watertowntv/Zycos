@@ -7,6 +7,8 @@ import zaqws.zycos.Main.Companion.plugin
 import java.util.ArrayDeque
 import java.util.Queue
 
+
+
 class ForEachTicked {
     private var onCompleteBlock: (() -> Unit)? = null
     private var onTickBlock: (() -> Unit)? = null
@@ -57,6 +59,41 @@ fun <T> Iterable<T>.forEachTicked(
                 }
 
                 action(iterator.next())
+            }
+
+            task.finish()
+            this.cancel()
+        }
+    }.runTaskTimer(plugin, 0L, 1L)
+
+    return task
+}
+
+fun interface LongConsumer {
+    fun accept(value: Long)
+}
+
+fun LongArray.forEachTicked(
+    thresholdMs: Long = 10,
+    action: LongConsumer
+): ForEachTicked {
+    val task = ForEachTicked()
+    var index = 0
+    val size = this.size
+
+    object : BukkitRunnable() {
+        private val threshold = thresholdMs * 1_000_000L
+
+        override fun run() {
+            val startTime = System.nanoTime()
+
+            while (index < size) {
+                if (System.nanoTime() - startTime >= threshold) {
+                    task.tick()
+                    return
+                }
+
+                action.accept(this@forEachTicked[index++])
             }
 
             task.finish()
