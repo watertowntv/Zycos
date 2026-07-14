@@ -35,9 +35,14 @@ class PersistentItemDataManager<T: PersistentItemDataManager.PersistentItemData>
         val data: T,
         var version: Int
     )
+
     private val cache = CacheBuilder.newBuilder()
         .expireAfterAccess(expireMinutes.minutes.toJavaDuration())
         .build<UUID, CacheEntry<T>>()
+    private val referenceCache = CacheBuilder.newBuilder()
+        .weakKeys()
+        .expireAfterAccess(expireMinutes.minutes.toJavaDuration())
+        .build<ItemStack, CacheEntry<T>>()
 
     @OptIn(ExperimentalSerializationApi::class)
     private val cbor = Cbor { ignoreUnknownKeys = true }
@@ -70,8 +75,11 @@ class PersistentItemDataManager<T: PersistentItemDataManager.PersistentItemData>
     @OptIn(ExperimentalSerializationApi::class)
     operator fun get(item: ItemStack): T? {
         if (item.isEmpty) return null
-        val uuid = getUUID(item) ?: return null
 
+        val cachedEntry = referenceCache.getIfPresent(item)
+        if (cachedEntry != null) return cachedEntry.data
+
+        val uuid = getUUID(item) ?: return null
         val version = item.persistentDataContainer.get(
             versionKey,
             PersistentDataType.INTEGER
@@ -79,6 +87,8 @@ class PersistentItemDataManager<T: PersistentItemDataManager.PersistentItemData>
 
         var entry = cache.getIfPresent(uuid)
         if (entry != null && entry.version >= version) {
+            referenceCache.put(item, entry)
+
             return entry.data
         }
 
@@ -91,6 +101,7 @@ class PersistentItemDataManager<T: PersistentItemDataManager.PersistentItemData>
 
         entry = CacheEntry(data, version)
         cache.put(uuid, entry)
+        referenceCache.put(item, entry)
 
         return entry.data
     }
@@ -113,7 +124,9 @@ class PersistentItemDataManager<T: PersistentItemDataManager.PersistentItemData>
             pdc.set(versionKey, PersistentDataType.INTEGER, nextVersion)
         }
 
-        cache.put(uuid, CacheEntry(data, nextVersion))
+        val entry = CacheEntry(data, nextVersion)
+        cache.put(uuid, entry)
+        referenceCache.put(item, entry)
 
         return true
     }
@@ -123,6 +136,7 @@ class PersistentItemDataManager<T: PersistentItemDataManager.PersistentItemData>
         val uuid = getUUID(item) ?: return false
 
         cache.invalidate(uuid)
+        referenceCache.invalidate(item)
 
         item.editPersistentDataContainer { pdc ->
             pdc.remove(uuidKey)
@@ -143,6 +157,7 @@ class PersistentItemDataManager<T: PersistentItemDataManager.PersistentItemData>
 
     fun clear(unregister: Boolean = false) {
         cache.invalidateAll()
+        referenceCache.invalidateAll()
 
         if (unregister) {
             HandlerList.unregisterAll(listener)
