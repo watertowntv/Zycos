@@ -156,14 +156,14 @@ class PersistentItemDataManager<T: PersistentItemDataManager.PersistentItemData>
 
 
     fun clear(unregister: Boolean = false) {
+        saveAll()
+
         cache.invalidateAll()
         referenceCache.invalidateAll()
 
         if (unregister) {
             HandlerList.unregisterAll(listener)
         }
-
-        saveAll()
     }
 
     fun saveAll() {

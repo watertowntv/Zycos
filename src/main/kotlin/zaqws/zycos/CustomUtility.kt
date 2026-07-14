@@ -1349,20 +1349,42 @@ fun Location.toEntityLocation() =
  * @return Location on Ground
  */
 fun Location.toGround(filter: List<Material> = listOf()): Location {
-    val location = clone()
+    val world = this.world ?: return this
+    val minHeight = world.minHeight
+    val maxHeight = world.maxHeight - 1
 
-    while ((location.block.type.isAir || location.block.isPassable) || location.block.type in filter) {
-        if (location.y <= -64) break
+    val x = this.blockX
+    val z = this.blockZ
 
-        location.y -= 1
+    var y = this.blockY.coerceIn(minHeight, maxHeight)
+    val decimalY = this.y - this.blockY
+
+    val hasFilter = filter.isNotEmpty()
+    val filterSet = if (hasFilter && filter !is Set<*>) filter.toSet() else filter
+
+    val chunk = world.getChunkAt(x shr Constants.CHUNK_SHIFT, z shr Constants.CHUNK_SHIFT)
+
+    while (y > minHeight) {
+        val block = chunk.getBlock(x and 15, y, z and 15)
+        val type = block.type
+
+        val isPassable = type.isAir || block.isPassable || (hasFilter && type in filterSet)
+        if (!isPassable) break
+
+        --y
     }
-    while (!(location.block.type.isAir || location.block.isPassable) || location.block.type in filter) {
-        if (location.y >= 312) break
 
-        location.y += 1
+    while (y < maxHeight) {
+        val block = chunk.getBlock(x and 15, y, z and 15)
+        val type = block.type
+
+        val isPassable = type.isAir || block.isPassable || (hasFilter && type in filterSet)
+        if (isPassable) break
+
+        ++y
     }
 
-    return location
+    return Location(world, this.x, y + decimalY, this.z, this.yaw, this.pitch)
 }
 
 /**
