@@ -1536,6 +1536,14 @@ fun Location.clone(target: Location): Location {
     return this
 }
 
+fun Vector.clone(target: Vector): Vector {
+    this.x = target.x
+    this.y = target.y
+    this.z = target.z
+
+    return this
+}
+
 /**
  * To Vector3f
  *

@@ -7,12 +7,12 @@ import org.bukkit.Location
 import org.bukkit.plugin.java.JavaPlugin
 import org.bukkit.util.Vector
 
-class ProjectileManager(private val plugin: JavaPlugin) {
+class ProjectileManager(plugin: JavaPlugin) {
     private val projectiles = mutableListOf<SyncedProjectile>()
 
     init {
         plugin.server.scheduler.runTaskTimer(
-            Main.plugin,
+            plugin,
             this::update,
             0L,
             1L
@@ -35,13 +35,18 @@ class ProjectileManager(private val plugin: JavaPlugin) {
     }
 
     private fun update() {
-        val iterator = projectiles.iterator()
+        var i = 0
 
-        while (iterator.hasNext()) {
-            val projectile = iterator.next()
-
+        while (i < projectiles.size) {
+            val projectile = projectiles[i]
             projectile.update()
-            if (projectile.removed) iterator.remove()
+
+            if (projectile.removed) {
+                val lastIndex = projectiles.size - 1
+                if (i != lastIndex) projectiles[i] = projectiles[lastIndex]
+
+                projectiles.removeLast()
+            } else i++
         }
     }
 
@@ -61,7 +66,13 @@ class ProjectileManager(private val plugin: JavaPlugin) {
         private val maxRangeSquared = maxRange * maxRange
         private var tick = 0
 
-        private val movementStack = ArrayDeque<Pair<Location, Vector>>(2)
+        private var historyIndex = 0
+        private val locationHistory = Array(2) {
+            Location(null, 0.0, 0.0, 0.0)
+        }
+        private val velocityHistory = Array(2) {
+            Vector()
+        }
 
         var velocity = Vector()
         internal var removed = false
@@ -82,10 +93,15 @@ class ProjectileManager(private val plugin: JavaPlugin) {
 
             onUpdate()
 
-            val (prevLocation, prevVelocity) = movementStack.removeLast()
-            movementStack.addFirst(location.clone() to velocity.clone())
+            val prevLocation = locationHistory[historyIndex]
+            val prevVelocity = velocityHistory[historyIndex]
 
             onMovement(prevLocation, prevVelocity)
+
+            locationHistory[historyIndex].clone(location)
+            velocityHistory[historyIndex].clone(velocity)
+
+            historyIndex = 1 - historyIndex
         }
 
         fun remove() {
@@ -95,26 +111,26 @@ class ProjectileManager(private val plugin: JavaPlugin) {
             onRemove()
 
             onPoolReturn?.invoke(this)
-            onPoolReturn = null
         }
 
         fun initialize() {
-            movementStack.addLast(location.clone() to velocity.clone())
-            movementStack.addLast(location.clone() to velocity.clone())
+            locationHistory[0].clone(location)
+            locationHistory[1].clone(location)
 
-            onInit()
+            velocityHistory[0].clone(velocity)
+            velocityHistory[1].clone(velocity)
+
+            onInitialize()
         }
 
         internal fun reset() {
             tick = 0
             removed = false
 
-            velocity = Vector()
-
-            movementStack.clear()
+            velocity.zero()
         }
 
-        protected open fun onInit() {}
+        protected open fun onInitialize() {}
 
         /**
          * Where rayTrace is performed
@@ -138,13 +154,14 @@ class ProjectileManager(private val plugin: JavaPlugin) {
         ) {
             val projectile = queue.removeLastOrNull()?.apply {
                 reset()
-            } ?: factory()
+            } ?: factory().apply {
+                onPoolReturn = {
+                    @Suppress("UNCHECKED_CAST")
+                    queue.addLast(this)
+                }
+            }
 
             initializer(projectile)
-            projectile.onPoolReturn = {
-                @Suppress("UNCHECKED_CAST")
-                queue.addLast(it as T)
-            }
 
             spawnProjectile(projectile, location, velocity)
         }
