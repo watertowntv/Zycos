@@ -631,8 +631,9 @@ fun text(text: String = "", color: NamedTextColor = NamedTextColor.WHITE, decora
  * @param text String message
  * @param color Text color
  */
-fun TextComponent.text(text: String = "", color: NamedTextColor = NamedTextColor.WHITE) =
-    append(Component.text(text, color))
+fun TextComponent.text(text: String = "", color: NamedTextColor = NamedTextColor.WHITE, decorations: Collection<TextDecoration> = emptySet()) =
+    if (decorations.isEmpty()) append(Component.text(text, color))
+    else append(Component.text(text, color, decorations.toSet()))
 
 /**
  * Adds hover event
@@ -717,23 +718,33 @@ inline fun randomRange(min: Int, max: Int): Int {
  * @return List of strings
  */
 fun String.splitLines(maxLength: Int = 16): List<String> {
+    if (this.isEmpty()) return emptyList()
+
     val result = mutableListOf<String>()
-    val segment = mutableListOf<String>()
-    var length = 0
+    val currentLine = StringBuilder()
 
-    split(' ').forEach { w ->
-        segment.add(w)
+    this.splitToSequence(' ').forEach { word ->
+        if (word.isEmpty()) return@forEach
+        val expectedLength = if (currentLine.isEmpty()) word.length
+        else currentLine.length + 1 + word.length
 
-        length += w.length + 1
-        if (length > maxLength) {
-            length = 0
+        if (expectedLength <= maxLength) {
+            if (currentLine.isNotEmpty()) currentLine.append(' ')
 
-            result.add(segment.joinToString(" "))
-            segment.clear()
+            currentLine.append(word)
+        } else {
+            if (currentLine.isNotEmpty()) {
+                result.add(currentLine.toString())
+                currentLine.clear()
+            }
+
+            currentLine.append(word)
         }
     }
 
-    result.add(segment.joinToString(" "))
+    if (currentLine.isNotEmpty()) {
+        result.add(currentLine.toString())
+    }
 
     return result
 }
@@ -869,7 +880,7 @@ fun isPrime(n: Int): Boolean {
  */
 fun Vector.normalizeWithLength(): Double {
     val square = (x * x + y * y + z * z).toFloat()
-    if (square == 0f) return 0.0
+    if (square < Constants.EPSILON) return 0.0
 
     val rsqrt = 1.0f / sqrt(square)
     x *= rsqrt
@@ -885,7 +896,7 @@ fun Vector.normalizeWithLength(): Double {
  */
 fun Vector.fastNormalize(): Vector {
     val square = (x * x + y * y + z * z).toFloat()
-    if (square == 0f) return this
+    if (square < Constants.EPSILON) return this
 
     val rsqrt = 1.0f / sqrt(square)
     x *= rsqrt
@@ -1697,12 +1708,14 @@ fun trace(
 /**
  * Iterate an array list
  */
+@Deprecated("Bad")
 fun <T> Iterable<T>.iterEach(value: (element: T) -> Unit) =
     toList().forEach(value)
 
 /**
  * Iterate an array list (Includes null)
  */
+@Deprecated("Bad")
 fun <T> Iterable<T?>.iterEachOrNull(value: (element: T?) -> Unit) =
     toList().forEach(value)
 

@@ -156,7 +156,6 @@ class ProjectileManager(plugin: JavaPlugin) {
                 reset()
             } ?: factory().apply {
                 onPoolReturn = {
-                    @Suppress("UNCHECKED_CAST")
                     queue.addLast(this)
                 }
             }

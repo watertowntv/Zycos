@@ -127,12 +127,12 @@ object AreaManager {
         val start: Position,
         val end: Position
     ) {
-        val boundingBoxStart = Position(
+        val boundingBoxStart: Position = Position(
             min(start.x, end.x),
             min(start.y, end.y),
             min(start.z, end.z)
         )
-        val boundingBoxEnd = Position(
+        val boundingBoxEnd: Position = Position(
             max(start.x, end.x),
             max(start.y, end.y),
             max(start.z, end.z)
@@ -189,14 +189,13 @@ object AreaManager {
             get() = onlinePlayers.asSequence().filter {
                 it.location.toPosition() in this
             }
-        val size: Long
-            get() {
-                val x = boundingBoxEnd.x - boundingBoxStart.x + 1
-                val y = boundingBoxEnd.y - boundingBoxStart.y + 1
-                val z = boundingBoxEnd.z - boundingBoxStart.z + 1
+        val size: Long = run {
+            val x = boundingBoxEnd.x - boundingBoxStart.x + 1
+            val y = boundingBoxEnd.y - boundingBoxStart.y + 1
+            val z = boundingBoxEnd.z - boundingBoxStart.z + 1
 
-                return x.toLong() * y.toLong() * z.toLong()
-            }
+            x.toLong() * y.toLong() * z.toLong()
+        }
 
         fun clone() = Area(start, end)
 
