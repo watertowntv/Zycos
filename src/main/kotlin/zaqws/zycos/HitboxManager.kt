@@ -29,7 +29,7 @@ class HitboxManager(
         private const val DEFAULT_MAX_HISTORY_TICKS = 10
         private const val TASK_DELAY = 0L
         private const val TASK_PERIOD = 1L
-        private const val MILLISECONDS_PER_TICK = 50.0
+        private const val MILLISECONDS_PER_TICK = 1.0 / 50.0
         private const val CHUNK_SHIFT = 4
     }
 
@@ -156,7 +156,7 @@ class HitboxManager(
         val maximumChunkZ = (floor(maximumZ).toInt() shr CHUNK_SHIFT) + 1
 
         val pingMilliseconds = shooter.ping
-        val pingTicks = (pingMilliseconds / MILLISECONDS_PER_TICK).roundToInt().coerceIn(0, maxHistoryTicks)
+        val pingTicks = (pingMilliseconds * MILLISECONDS_PER_TICK).roundToInt().coerceIn(0, maxHistoryTicks)
         val targetTick = currentTick - pingTicks
 
         var closestPlayer: Player? = null
@@ -369,9 +369,10 @@ class HitboxManager(
     }
 
     private class PlayerHistory(
-        private val maxHistoryTicks: Int
+        maxHistoryTicks: Int
     ) {
-        private val history = Array(maxHistoryTicks) { HistoricalHitbox() }
+        private val bufferSize = maxHistoryTicks + 1
+        private val history = Array(bufferSize) { HistoricalHitbox() }
 
         fun record(tick: Long, player: Player) {
             val x = player.x
@@ -381,7 +382,7 @@ class HitboxManager(
             val halfWidth = player.width / 2.0
             val height = player.height
 
-            val index = (tick % maxHistoryTicks).toInt()
+            val index = (tick % bufferSize).toInt()
             history[index].update(
                 tick,
                 x - halfWidth,
@@ -394,8 +395,8 @@ class HitboxManager(
         }
 
         fun getAtTick(targetTick: Long): HistoricalHitbox? {
-            var index = (targetTick % maxHistoryTicks).toInt()
-            if (index < 0) index += maxHistoryTicks
+            var index = (targetTick % bufferSize).toInt()
+            if (index < 0) index += bufferSize
 
             val entry = history[index]
 
