@@ -11,5 +11,11 @@ class Main : JavaPlugin(), CommandExecutor {
 
     override fun onEnable() {
         plugin = this
+
+        OnlinePlayerManager.initialize()
+    }
+
+    override fun onDisable() {
+        OnlinePlayerManager.unregister()
     }
 }
