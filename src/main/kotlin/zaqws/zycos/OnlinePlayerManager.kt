@@ -27,11 +27,15 @@ internal object OnlinePlayerManager : Listener {
 
     @EventHandler
     private fun onJoin(event: PlayerJoinEvent) {
+        if (event.player in players) return
+
         players.add(event.player)
     }
 
     @EventHandler
     private fun onQuit(event: PlayerQuitEvent) {
+        if (event.player !in players) return
+
         players.remove(event.player)
     }
 

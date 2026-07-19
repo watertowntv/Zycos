@@ -13,7 +13,7 @@ import kotlin.random.Random
 val random = Random
 val secureRandom = SecureRandom()
 val overworld: World = Bukkit.getWorlds().first()
-val onlinePlayers: List<Player>
+val onlinePlayers: ArrayList<Player>
     get() = OnlinePlayerManager.players
 val miniMessage = MiniMessage.miniMessage()
 
