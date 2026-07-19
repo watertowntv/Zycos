@@ -54,7 +54,7 @@ object CoroutineManager {
         private val async: Boolean = false
     ) : CoroutineDispatcher() {
         override fun isDispatchNeeded(context: CoroutineContext) =
-            if (async) true else !Bukkit.isPrimaryThread()
+            async || !Bukkit.isPrimaryThread()
 
         override fun dispatch(context: CoroutineContext, block: Runnable) {
             if (async) plugin.server.scheduler.runTaskAsynchronously(plugin, block)

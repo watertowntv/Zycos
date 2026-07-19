@@ -29,8 +29,11 @@ class HitboxManager(
         private const val DEFAULT_MAX_HISTORY_TICKS = 10
         private const val TASK_DELAY = 0L
         private const val TASK_PERIOD = 1L
-        private const val MILLISECONDS_PER_TICK = 1.0 / 50.0
+        private const val MILLISECONDS_PER_TICK = 50.0
         private const val CHUNK_SHIFT = 4
+        private const val INTERPOLATION_TICKS = 1
+
+        private const val INVERSE_MILLISECONDS_PER_TICK = 1.0 / MILLISECONDS_PER_TICK
     }
 
     private var currentTick = 0L
@@ -48,12 +51,11 @@ class HitboxManager(
     private fun update() {
         val tick = ++currentTick
 
-        for (entry in historyMap.object2ObjectEntrySet()) {
-            val player = Bukkit.getPlayer(entry.key) ?: continue
+        for ((uuid, history) in historyMap.object2ObjectEntrySet()) {
+            val player = Bukkit.getPlayer(uuid) ?: continue
 
             if (player.gameMode == GameMode.SPECTATOR || !player.isValid) continue
 
-            val history = entry.value
             history.record(tick, player)
         }
     }
@@ -156,7 +158,9 @@ class HitboxManager(
         val maximumChunkZ = (floor(maximumZ).toInt() shr CHUNK_SHIFT) + 1
 
         val pingMilliseconds = shooter.ping
-        val pingTicks = (pingMilliseconds * MILLISECONDS_PER_TICK).roundToInt().coerceIn(0, maxHistoryTicks)
+        val pingTicks = (pingMilliseconds * INVERSE_MILLISECONDS_PER_TICK + INTERPOLATION_TICKS)
+            .roundToInt()
+            .coerceIn(0, maxHistoryTicks)
         val targetTick = currentTick - pingTicks
 
         var closestPlayer: Player? = null

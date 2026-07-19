@@ -65,7 +65,7 @@ object DisplayManager {
         fun remove(){
             removed = true
 
-            displayList.iterEach(BlockDisplay::remove)
+            displayList.forEach(BlockDisplay::remove)
             displayList.clear()
 
             removeQueue.add(this)

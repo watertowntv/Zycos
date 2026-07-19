@@ -783,7 +783,7 @@ fun String.capitalizeWords() = lowercase()
  * @return Random UUID-like String
  */
 fun getRandomString(length: Int): String {
-    val allowedChars = ('A'..'Z') + ('a'..'z') + ('0'..'9')
+    val allowedChars = ('A'..'Z').plusElement('a'..'z').plusElement('0'..'9')
 
     return (1..length).map {
         allowedChars.random()
@@ -1708,14 +1708,14 @@ fun trace(
 /**
  * Iterate an array list
  */
-@Deprecated("Bad")
+@Deprecated("Bad", ReplaceWith("iterator"))
 fun <T> Iterable<T>.iterEach(value: (element: T) -> Unit) =
     toList().forEach(value)
 
 /**
  * Iterate an array list (Includes null)
  */
-@Deprecated("Bad")
+@Deprecated("Bad", ReplaceWith("iterator"))
 fun <T> Iterable<T?>.iterEachOrNull(value: (element: T?) -> Unit) =
     toList().forEach(value)
 
@@ -1888,7 +1888,7 @@ inline fun <T, R : Comparable<R>> Iterable<T>.minsBy(selector: (T) -> R): List<T
  *
  * @param action Callback
  */
-inline fun <T> List<T>.fastForEach(action: (T) -> Unit) {
+inline fun <T> ArrayList<T>.fastForEach(action: (T) -> Unit) {
     for (i in 0..lastIndex) {
         action(this[i])
     }
@@ -1899,7 +1899,7 @@ inline fun <T> List<T>.fastForEach(action: (T) -> Unit) {
  *
  * @param action Callback
  */
-inline fun <T> List<T>.fastForEachIndexed(action: (index: Int, T) -> Unit) {
+inline fun <T> ArrayList<T>.fastForEachIndexed(action: (index: Int, T) -> Unit) {
     for (i in 0..lastIndex) {
         action(i, this[i])
     }
@@ -1910,7 +1910,7 @@ inline fun <T> List<T>.fastForEachIndexed(action: (index: Int, T) -> Unit) {
  *
  * @param action Callback
  */
-inline fun <T> List<T>.fastForEachReversed(action: (T) -> Unit) {
+inline fun <T> ArrayList<T>.fastForEachReversed(action: (T) -> Unit) {
     for (i in lastIndex downTo 0) {
         action(this[i])
     }
@@ -1922,7 +1922,7 @@ inline fun <T> List<T>.fastForEachReversed(action: (T) -> Unit) {
  * @param predicate Callback
  * @return First Found or null
  */
-inline fun <T> List<T>.fastFirstOrNull(predicate: (T) -> Boolean): T? {
+inline fun <T> ArrayList<T>.fastFirstOrNull(predicate: (T) -> Boolean): T? {
     for (i in 0..lastIndex) {
         val item = this[i]
 
@@ -1938,7 +1938,7 @@ inline fun <T> List<T>.fastFirstOrNull(predicate: (T) -> Boolean): T? {
  * @param predicate Callback
  * @return If any is true
  */
-inline fun <T> List<T>.fastAny(predicate: (T) -> Boolean): Boolean {
+inline fun <T> ArrayList<T>.fastAny(predicate: (T) -> Boolean): Boolean {
     for (i in 0..lastIndex) {
         if (predicate(this[i])) return true
     }
@@ -1951,7 +1951,7 @@ inline fun <T> List<T>.fastAny(predicate: (T) -> Boolean): Boolean {
  *
  * @param predicate Callback
  */
-inline fun <T> MutableList<T>.fastRemoveIf(predicate: (T) -> Boolean) {
+inline fun <T> ArrayList<T>.fastRemoveIf(predicate: (T) -> Boolean) {
     var writeIndex = 0
 
     for (readIndex in 0..lastIndex) {
