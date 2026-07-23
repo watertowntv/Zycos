@@ -2,7 +2,6 @@
 
 package zaqws.zycos
 
-import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap
 import org.bukkit.Bukkit
 import org.bukkit.ChunkSnapshot
 import org.bukkit.Location
@@ -312,49 +311,75 @@ object AreaManager {
     }
 
 
-    class AreaSnapshot(
-        private val snapshots: Long2ObjectOpenHashMap<ChunkSnapshot>
+    class AreaSnapshot internal constructor(
+        private val startChunkX: Int,
+        private val startChunkZ: Int,
+        private val endChunkX: Int,
+        private val endChunkZ: Int,
+        private val widthZ: Int,
+        private val minY: Int,
+        private val maxY: Int,
+        private val snapshots: Array<ChunkSnapshot?>
     ) {
         companion object {
-            @Suppress("NOTHING_TO_INLINE")
-            private inline fun chunkKey(chunkX: Int, chunkZ: Int) =
-                (chunkX.toLong() shl 32) or (chunkZ.toLong() and 0xFFFFFFFFL)
-
             internal fun create(area: Area): AreaSnapshot {
-                val startChunkX = area.boundingBoxStart.chunkX
-                val endChunkX = area.boundingBoxEnd.chunkX
-                val startChunkZ = area.boundingBoxStart.chunkZ
-                val endChunkZ = area.boundingBoxEnd.chunkZ
+                val startX = area.boundingBoxStart.chunkX
+                val endX = area.boundingBoxEnd.chunkX
+                val startZ = area.boundingBoxStart.chunkZ
+                val endZ = area.boundingBoxEnd.chunkZ
 
-                val map = Long2ObjectOpenHashMap<ChunkSnapshot>()
+                val widthX = endX - startX + 1
+                val widthZ = endZ - startZ + 1
 
-                for (chunkZ in startChunkZ..endChunkZ)
-                    for (chunkX in startChunkX..endChunkX) {
-                        val chunk = overworld.getChunkAt(chunkX, chunkZ)
-                        val snapshot = chunk.getChunkSnapshot(false, false, false)
+                val snapshots = arrayOfNulls<ChunkSnapshot>(widthX * widthZ)
 
-                        val key = chunkKey(chunkX, chunkZ)
-                        map[key] = snapshot
+                for (chunkZ in startZ..endZ) {
+                    val zOffset = chunkZ - startZ
+
+                    for (chunkX in startX..endX) {
+                        val index = (chunkX - startX) * widthZ + zOffset
+
+                        snapshots[index] = overworld.getChunkAt(chunkX, chunkZ).getChunkSnapshot(
+                            false,
+                            false,
+                            false
+                        )
                     }
+                }
 
-                return AreaSnapshot(map)
+                return AreaSnapshot(
+                    startX, startZ, endX, endZ,
+                    widthZ,
+                    area.boundingBoxStart.y, area.boundingBoxEnd.y,
+                    snapshots
+                )
             }
         }
 
         fun getBlockType(x: Int, y: Int, z: Int): BlockType? {
+            if (y !in minY..maxY) return null
+            if (y < overworld.minHeight || y >= overworld.maxHeight) return null
+
             val chunkX = x shr Constants.CHUNK_SHIFT
             val chunkZ = z shr Constants.CHUNK_SHIFT
 
-            val snapshot = snapshots[chunkKey(chunkX, chunkZ)] ?: return null
-            return snapshot.getBlockType(x and 15, y, z and 15).asBlockType()
+            if (chunkX !in startChunkX..endChunkX || chunkZ !in startChunkZ..endChunkZ) return null
+
+            val index = (chunkX - startChunkX) * widthZ + (chunkZ - startChunkZ)
+            return snapshots[index]?.getBlockType(x and 15, y, z and 15)?.asBlockType()
         }
 
         fun getBlockData(x: Int, y: Int, z: Int): BlockData? {
+            if (y !in minY..maxY) return null
+            if (y < overworld.minHeight || y >= overworld.maxHeight) return null
+
             val chunkX = x shr Constants.CHUNK_SHIFT
             val chunkZ = z shr Constants.CHUNK_SHIFT
 
-            val snapshot = snapshots[chunkKey(chunkX, chunkZ)] ?: return null
-            return snapshot.getBlockData(x and 15, y, z and 15)
+            if (chunkX !in startChunkX..endChunkX || chunkZ !in startChunkZ..endChunkZ) return null
+
+            val index = (chunkX - startChunkX) * widthZ + (chunkZ - startChunkZ)
+            return snapshots[index]?.getBlockData(x and 15, y, z and 15)
         }
     }
 }
