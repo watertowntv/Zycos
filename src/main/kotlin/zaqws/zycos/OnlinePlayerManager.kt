@@ -10,7 +10,7 @@ import org.bukkit.event.player.PlayerJoinEvent
 import org.bukkit.event.player.PlayerQuitEvent
 
 internal object OnlinePlayerManager : Listener {
-    internal val players = arrayListOf<Player>()
+    internal val players = ArrayList<Player>()
 
     internal fun initialize() {
         players.clear()

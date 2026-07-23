@@ -2,10 +2,16 @@
 
 package zaqws.zycos
 
+import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap
+import org.bukkit.Bukkit
+import org.bukkit.ChunkSnapshot
 import org.bukkit.Location
 import org.bukkit.World
+import org.bukkit.block.BlockType
+import org.bukkit.block.data.BlockData
 import org.bukkit.entity.Player
 import org.bukkit.util.Vector
+import java.util.concurrent.CompletableFuture
 import kotlin.math.absoluteValue
 import kotlin.math.max
 import kotlin.math.min
@@ -24,28 +30,29 @@ object AreaManager {
             operator fun invoke(x: Int, y: Int, z: Int) = Position(pack(x, y, z))
 
             fun lerp(start: Position, target: Position, ratio: Double): Position {
-                val sX = start.x
-                val sY = start.y
-                val sZ = start.z
-
-                val tX = target.x
-                val tY = target.y
-                val tZ = target.z
+                val startX = start.x
+                val startY = start.y
+                val startZ = start.z
 
                 return invoke(
-                    (sX + (tX - sX) * ratio).toInt(),
-                    (sY + (tY - sY) * ratio).toInt(),
-                    (sZ + (tZ - sZ) * ratio).toInt()
+                    (startX + (target.x - startX) * ratio).toInt(),
+                    (startY + (target.y - startY) * ratio).toInt(),
+                    (startZ + (target.z - startZ) * ratio).toInt()
                 )
             }
         }
 
-        val x: Int get() = (raw shr 38).toInt()
-        val y: Int get() = (raw shl 52 shr 52).toInt()
-        val z: Int get() = (raw shl 26 shr 38).toInt()
+        val x: Int
+            get() = (raw shr 38).toInt()
+        val y: Int
+            get() = (raw shl 52 shr 52).toInt()
+        val z: Int
+            get() = (raw shl 26 shr 38).toInt()
 
-        val chunkX: Int get() = x shr Constants.CHUNK_SHIFT
-        val chunkZ: Int get() = z shr Constants.CHUNK_SHIFT
+        val chunkX: Int
+            get() = x shr Constants.CHUNK_SHIFT
+        val chunkZ: Int
+            get() = z shr Constants.CHUNK_SHIFT
 
         operator fun plus(other: Position) = Position(
             x + other.x,
@@ -71,6 +78,11 @@ object AreaManager {
             x * n,
             y * n,
             z * n
+        )
+        operator fun div(n: Int) = Position(
+            x / n,
+            y / n,
+            z / n
         )
 
         operator fun component1() = x
@@ -102,17 +114,17 @@ object AreaManager {
             z.toDouble()
         )
 
-        fun distanceSquared(target: Position): Long {
-            val dx = (x - target.x).toLong()
-            val dy = (y - target.y).toLong()
-            val dz = (z - target.z).toLong()
+        fun distanceSquared(target: Position): Int {
+            val dx = x - target.x
+            val dy = y - target.y
+            val dz = z - target.z
 
             return dx * dx + dy * dy + dz * dz
         }
 
-        fun distanceSquared2D(target: Position): Long {
-            val dx = (x - target.x).toLong()
-            val dz = (z - target.z).toLong()
+        fun distanceSquared2D(target: Position): Int {
+            val dx = x - target.x
+            val dz = z - target.z
 
             return dx * dx + dz * dz
         }
@@ -207,25 +219,43 @@ object AreaManager {
             val chunkRangeX = (rangeX.first shr Constants.CHUNK_SHIFT)..(rangeX.last shr Constants.CHUNK_SHIFT)
             val chunkRangeZ = (rangeZ.first shr Constants.CHUNK_SHIFT)..(rangeZ.last shr Constants.CHUNK_SHIFT)
 
-            for(chunkX in chunkRangeX){
+            for (chunkX in chunkRangeX) {
                 val chunkStartX = chunkX shl Constants.CHUNK_SHIFT
                 val startX = max(rangeX.first, chunkStartX)
                 val endX = min(rangeX.last, chunkStartX + 15)
 
-                for(chunkZ in chunkRangeZ){
+                for (chunkZ in chunkRangeZ) {
                     val chunkStartZ = chunkZ shl Constants.CHUNK_SHIFT
                     val startZ = max(rangeZ.first, chunkStartZ)
                     val endZ = min(rangeZ.last, chunkStartZ + 15)
 
-                    for(y in rangeY){
-                        for(z in startZ..endZ){
-                            for(x in startX..endX)
+                    for (y in rangeY)
+                        for (z in startZ..endZ)
+                            for (x in startX..endX) {
                                 callback(x, y, z)
-                        }
-                    }
+                            }
                 }
             }
         }
+
+
+        val snapshot: AreaSnapshot
+            get() {
+                if (Bukkit.isPrimaryThread()) {
+                    return AreaSnapshot.create(this)
+                }
+
+                val future = CompletableFuture<AreaSnapshot>()
+                Bukkit.getScheduler().runTask(Main.plugin, Runnable {
+                    try {
+                        future.complete(AreaSnapshot.create(this))
+                    } catch (exception: Throwable) {
+                        future.completeExceptionally(exception)
+                    }
+                })
+
+                return future.get()
+            }
     }
 
 
@@ -278,6 +308,53 @@ object AreaManager {
 
             return if (size == capacity) array
             else array.copyOf(size)
+        }
+    }
+
+
+    class AreaSnapshot(
+        private val snapshots: Long2ObjectOpenHashMap<ChunkSnapshot>
+    ) {
+        companion object {
+            @Suppress("NOTHING_TO_INLINE")
+            private inline fun chunkKey(chunkX: Int, chunkZ: Int) =
+                (chunkX.toLong() shl 32) or (chunkZ.toLong() and 0xFFFFFFFFL)
+
+            internal fun create(area: Area): AreaSnapshot {
+                val startChunkX = area.boundingBoxStart.chunkX
+                val endChunkX = area.boundingBoxEnd.chunkX
+                val startChunkZ = area.boundingBoxStart.chunkZ
+                val endChunkZ = area.boundingBoxEnd.chunkZ
+
+                val map = Long2ObjectOpenHashMap<ChunkSnapshot>()
+
+                for (chunkZ in startChunkZ..endChunkZ)
+                    for (chunkX in startChunkX..endChunkX) {
+                        val chunk = overworld.getChunkAt(chunkX, chunkZ)
+                        val snapshot = chunk.getChunkSnapshot(false, false, false)
+
+                        val key = chunkKey(chunkX, chunkZ)
+                        map[key] = snapshot
+                    }
+
+                return AreaSnapshot(map)
+            }
+        }
+
+        fun getBlockType(x: Int, y: Int, z: Int): BlockType? {
+            val chunkX = x shr Constants.CHUNK_SHIFT
+            val chunkZ = z shr Constants.CHUNK_SHIFT
+
+            val snapshot = snapshots[chunkKey(chunkX, chunkZ)] ?: return null
+            return snapshot.getBlockType(x and 15, y, z and 15).asBlockType()
+        }
+
+        fun getBlockData(x: Int, y: Int, z: Int): BlockData? {
+            val chunkX = x shr Constants.CHUNK_SHIFT
+            val chunkZ = z shr Constants.CHUNK_SHIFT
+
+            val snapshot = snapshots[chunkKey(chunkX, chunkZ)] ?: return null
+            return snapshot.getBlockData(x and 15, y, z and 15)
         }
     }
 }

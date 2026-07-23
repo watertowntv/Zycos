@@ -42,12 +42,14 @@ import net.kyori.adventure.title.Title.Times
 import org.bukkit.*
 import org.bukkit.attribute.Attribute
 import org.bukkit.block.BlockFace
+import org.bukkit.block.BlockType
 import org.bukkit.block.data.BlockData
 import org.bukkit.enchantments.Enchantment
 import org.bukkit.entity.*
 import org.bukkit.event.entity.PlayerDeathEvent
 import org.bukkit.inventory.Inventory
 import org.bukkit.inventory.ItemStack
+import org.bukkit.inventory.ItemType
 import org.bukkit.inventory.MerchantRecipe
 import org.bukkit.inventory.PlayerInventory
 import org.bukkit.plugin.java.JavaPlugin
@@ -69,7 +71,7 @@ import kotlin.math.*
 /**
  * Creates a named ItemStack
  *
- * @param type Material
+ * @param type ItemType
  * @param name Name
  * @param lore Lore
  * @param enchantments Enchantments
@@ -83,14 +85,14 @@ import kotlin.math.*
  * @return ItemStack
  */
 fun getNamedItem(
-    type: Material,
+    type: ItemType,
     name: TextComponent? = null,
     lore: List<TextComponent> = listOf(),
     amount: Int = 1,
     enchantments: List<Pair<Enchantment, Int>> = listOf(),
     unbreakable: Boolean = false,
-    canPlaceOn: List<Material> = listOf(),
-    canBreak: List<Material> = listOf(),
+    canPlaceOn: List<BlockType> = listOf(),
+    canBreak: List<BlockType> = listOf(),
     maxStackSize: Int? = null,
     hideTooltip: Boolean = false,
     hideEnchantments: Boolean = false,
@@ -98,7 +100,7 @@ fun getNamedItem(
     hideUnbreakable: Boolean = false,
     customModelData: String? = null
 ): ItemStack {
-    val itemStack = ItemStack.of(type, amount).apply {
+    val itemStack = type.createItemStack(amount).apply {
         if (name != null) {
             val nameComponent = name.decoration(TextDecoration.ITALIC, false)
 
@@ -141,8 +143,8 @@ fun getNamedItem(
             )
         }
 
-        fun createAdventurePredicate(materials: List<Material>): ItemAdventurePredicate {
-            val typedKeys = materials.map { TypedKey.create(RegistryKey.BLOCK, it.getKey()) }
+        fun createAdventurePredicate(blockTypes: List<BlockType>): ItemAdventurePredicate {
+            val typedKeys = blockTypes.map { TypedKey.create(RegistryKey.BLOCK, it.key) }
             val keySet = RegistrySet.keySet(RegistryKey.BLOCK, typedKeys)
             val predicate = BlockPredicate.predicate().blocks(keySet).build()
 
@@ -182,7 +184,7 @@ fun getNamedSkull(
     lore: List<TextComponent> = listOf(),
     amount: Int = 1
 ): ItemStack {
-    val itemStack = ItemStack.of(Material.PLAYER_HEAD, amount).apply {
+    val itemStack = ItemType.PLAYER_HEAD.createItemStack(amount).apply {
         setData(
             DataComponentTypes.ITEM_NAME,
             name.decoration(TextDecoration.ITALIC, false)
@@ -224,7 +226,7 @@ fun getCustomPotion(
     name: TextComponent? = null,
     color: Color? = null
 ) = getCustomPotionImpl(
-    Material.POTION,
+    ItemType.POTION,
     type,
     amplifier,
     duration,
@@ -252,7 +254,7 @@ fun getCustomSplashPotion(
     name: TextComponent? = null,
     color: Color? = null
 ) = getCustomPotionImpl(
-    Material.SPLASH_POTION,
+    ItemType.SPLASH_POTION,
     type,
     amplifier,
     duration,
@@ -262,7 +264,7 @@ fun getCustomSplashPotion(
 )
 
 private fun getCustomPotionImpl(
-    material: Material,
+    itemType: ItemType,
     type: PotionEffectType,
     amplifier: Int,
     duration: Int,
@@ -270,7 +272,7 @@ private fun getCustomPotionImpl(
     name: TextComponent?,
     color: Color?
 ): ItemStack {
-    val itemStack = ItemStack.of(material)
+    val itemStack = itemType.createItemStack()
     val effect = PotionEffect(type, duration, amplifier, false, particle)
     var contents = PotionContents.potionContents().addCustomEffect(effect)
 
@@ -1092,17 +1094,17 @@ fun World.playFirework(
 }
 
 /**
- * Remove specific amount of material from inventory
+ * Remove specific amount of ItemType from inventory
  *
- * @param type Material
+ * @param type ItemType
  * @param count Amount to remove
  */
-fun Inventory.removeMaterial(type: Material, count: Int) {
+fun Inventory.removeItemType(type: ItemType, count: Int) {
     var remaining = count
 
     for (i in size - 1 downTo 0) {
         val item = getItem(i) ?: continue
-        if (item.type != type) continue
+        if (item.type.asItemType() != type) continue
 
         val new = max(0, item.amount - remaining)
         remaining -= item.amount
@@ -1113,13 +1115,13 @@ fun Inventory.removeMaterial(type: Material, count: Int) {
 }
 
 /**
- * Returns the amount of material in an inventory\
+ * Returns the amount of ItemType in an inventory
  *
- * @param type Material
- * @return Amount of material
+ * @param type ItemType
+ * @return Amount of ItemType
  */
-fun Inventory.countMaterial(type: Material) = contents.sumOf {
-    if (it?.type == type) it.amount else 0
+fun Inventory.countItemType(type: ItemType) = contents.sumOf {
+    if (it?.type?.asItemType() == type) it.amount else 0
 }
 
 /**
@@ -1203,7 +1205,7 @@ fun Inventory.getRemainingSpaceFor(item: ItemStack): Int {
     for (i in 0 until size) {
         val current = getItem(i)
 
-        if (current == null || current.type == Material.AIR) {
+        if (current == null || current.isEmpty) {
             space += maxStack
             continue
         }
@@ -1241,13 +1243,13 @@ fun Display.updatePivot(size: Vector3f = transformation.scale){
  * Spawns Block Display
  *
  * @param location Spawn location
- * @param type Material
+ * @param type BlockType
  * @param size Size of the display (Vector)
  * @return BlockDisplay
  */
 fun World.spawnBlockDisplay(
     location: Location,
-    type: Material,
+    type: BlockType,
     size: Vector = Vector(1, 1, 1)
 ) = spawnBlockDisplay(location, type.createBlockData(), size)
 
@@ -1356,10 +1358,10 @@ fun Location.toEntityLocation() =
  * If in air, down to ground
  * If underground, up to air
  *
- * @param filter Materials to ignore
+ * @param filter List of BlockType to ignore
  * @return Location on Ground
  */
-fun Location.toGround(filter: List<Material> = listOf()): Location {
+fun Location.toGround(filter: List<BlockType> = listOf()): Location {
     val world = this.world ?: return this
     val minHeight = world.minHeight
     val maxHeight = world.maxHeight - 1
@@ -1379,7 +1381,7 @@ fun Location.toGround(filter: List<Material> = listOf()): Location {
         val block = chunk.getBlock(x and 15, y, z and 15)
         val type = block.type
 
-        val isPassable = type.isAir || block.isPassable || (hasFilter && type in filterSet)
+        val isPassable = type.isAir || block.isPassable || (hasFilter && type.asBlockType() in filterSet)
         if (!isPassable) break
 
         --y
@@ -1389,7 +1391,7 @@ fun Location.toGround(filter: List<Material> = listOf()): Location {
         val block = chunk.getBlock(x and 15, y, z and 15)
         val type = block.type
 
-        val isPassable = type.isAir || block.isPassable || (hasFilter && type in filterSet)
+        val isPassable = type.isAir || block.isPassable || (hasFilter && type.asBlockType() in filterSet)
         if (isPassable) break
 
         ++y

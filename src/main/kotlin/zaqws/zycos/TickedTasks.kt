@@ -8,12 +8,12 @@ import java.util.ArrayDeque
 import java.util.Queue
 
 
-
 class ForEachTicked {
     private var onCompleteBlock: (() -> Unit)? = null
     private var onTickBlock: (() -> Unit)? = null
     private var isFinished = false
 
+    @Deprecated("Use ChunkSnapshot with Coroutine")
     fun onComplete(block: () -> Unit): ForEachTicked {
         this.onCompleteBlock = block
 
@@ -22,6 +22,7 @@ class ForEachTicked {
         return this
     }
 
+    @Deprecated("Use ChunkSnapshot with Coroutine")
     fun onTick(block: () -> Unit): ForEachTicked {
         this.onTickBlock = block
 
@@ -39,6 +40,7 @@ class ForEachTicked {
     }
 }
 
+@Deprecated("Use ChunkSnapshot with Coroutine")
 fun <T> Iterable<T>.forEachTicked(
     thresholdMs: Long = 10,
     action: (T) -> Unit
@@ -73,6 +75,7 @@ fun interface LongConsumer {
     fun accept(value: Long)
 }
 
+@Deprecated("Use ChunkSnapshot with Coroutine")
 fun LongArray.forEachTicked(
     thresholdMs: Long = 10,
     action: LongConsumer

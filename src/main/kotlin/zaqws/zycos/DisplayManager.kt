@@ -9,6 +9,7 @@ import org.bukkit.entity.BlockDisplay
 import org.bukkit.util.Transformation
 import org.joml.Vector3f
 
+@Deprecated("Not Used")
 object DisplayManager {
     private val holograms = mutableListOf<Hologram>()
     private val removeQueue = ArrayDeque<Hologram>()
