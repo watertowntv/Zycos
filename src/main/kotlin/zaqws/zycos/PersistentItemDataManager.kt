@@ -106,6 +106,10 @@ class PersistentItemDataManager<T: PersistentItemDataManager.PersistentItemData>
         return entry.data
     }
 
+    operator fun set(item: ItemStack, data: T): Boolean {
+        return save(item, data)
+    }
+
     @OptIn(ExperimentalSerializationApi::class)
     fun save(item: ItemStack, data: T): Boolean {
         if (item.isEmpty) return false
@@ -241,6 +245,8 @@ class PersistentItemDataManager<T: PersistentItemDataManager.PersistentItemData>
 
         @EventHandler(priority = EventPriority.MONITOR)
         fun onInventoryClose(event: InventoryCloseEvent) {
+            if (!strict) return
+
             event.inventory.contents.forEach(this::processSave)
         }
 

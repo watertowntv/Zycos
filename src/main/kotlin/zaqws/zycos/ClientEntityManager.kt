@@ -2,6 +2,7 @@
 
 package zaqws.zycos
 
+import com.mojang.datafixers.util.Pair
 import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap
 import it.unimi.dsi.fastutil.ints.IntArrayList
 import it.unimi.dsi.fastutil.objects.ObjectOpenHashSet
@@ -9,20 +10,25 @@ import net.minecraft.network.protocol.Packet
 import net.minecraft.network.protocol.game.ClientboundAddEntityPacket
 import net.minecraft.network.protocol.game.ClientboundRemoveEntitiesPacket
 import net.minecraft.network.protocol.game.ClientboundSetEntityDataPacket
+import net.minecraft.network.protocol.game.ClientboundSetEquipmentPacket
 import net.minecraft.network.protocol.game.ClientboundTeleportEntityPacket
 import net.minecraft.server.level.ServerPlayer
 import net.minecraft.world.entity.Entity
 import net.minecraft.world.entity.EntitySpawnReason
 import net.minecraft.world.entity.PositionMoveRotation
 import org.bukkit.Location
+import org.bukkit.craftbukkit.CraftEquipmentSlot
 import org.bukkit.craftbukkit.CraftWorld
 import org.bukkit.craftbukkit.entity.CraftEntityType
 import org.bukkit.craftbukkit.entity.CraftPlayer
+import org.bukkit.craftbukkit.inventory.CraftItemStack
 import org.bukkit.entity.Player
 import org.bukkit.event.EventHandler
 import org.bukkit.event.HandlerList
 import org.bukkit.event.Listener
 import org.bukkit.event.player.PlayerQuitEvent
+import org.bukkit.inventory.EquipmentSlot
+import org.bukkit.inventory.ItemStack
 
 object ClientEntityManager : Listener {
     private val entityMap = Int2ObjectOpenHashMap<ClientEntity>()
@@ -78,6 +84,7 @@ object ClientEntityManager : Listener {
 
     fun removeAll() {
         val iterator = entityMap.values.iterator()
+
         while (iterator.hasNext()) {
             iterator.next().destroy()
             iterator.remove()
@@ -133,9 +140,9 @@ object ClientEntityManager : Listener {
             players.forEach(this::hide)
         }
 
-        fun teleport(newLocation: Location) {
-            nmsEntity.setPos(newLocation.x, newLocation.y, newLocation.z)
-            nmsEntity.setRot(newLocation.yaw, newLocation.pitch)
+        fun teleport(location: Location) {
+            nmsEntity.setPos(location.x, location.y, location.z)
+            nmsEntity.setRot(location.yaw, location.pitch)
 
             broadcastPacket(ClientboundTeleportEntityPacket.teleport(
                 entityId,
@@ -143,6 +150,18 @@ object ClientEntityManager : Listener {
                 emptySet(),
                 nmsEntity.onGround
             ))
+        }
+
+        fun equip(slot: EquipmentSlot, item: ItemStack) {
+            val nmsSlot = CraftEquipmentSlot.getNMS(slot)
+            val nmsItem = CraftItemStack.asNMSCopy(item) ?: return
+
+            val packet = ClientboundSetEquipmentPacket(
+                entityId,
+                listOf(Pair(nmsSlot, nmsItem))
+            )
+
+            broadcastPacket(packet)
         }
 
         inline fun <reified E : org.bukkit.entity.Entity> update(crossinline block: E.() -> Unit) {
