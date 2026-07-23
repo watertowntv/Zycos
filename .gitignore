@@ -45,3 +45,4 @@ bin/
 copy.bat
 .idea/
 .kotlin/
+.paperweight/

@@ -12,7 +12,7 @@ import org.bukkit.event.player.PlayerQuitEvent
 internal object OnlinePlayerManager : Listener {
     internal val players = ArrayList<Player>()
 
-    internal fun initialize() {
+    internal fun register() {
         players.clear()
         players.addAll(Bukkit.getOnlinePlayers())
 

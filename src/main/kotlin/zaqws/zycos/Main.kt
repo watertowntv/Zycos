@@ -12,10 +12,12 @@ class Main : JavaPlugin(), CommandExecutor {
     override fun onEnable() {
         plugin = this
 
-        OnlinePlayerManager.initialize()
+        OnlinePlayerManager.register()
+        ClientEntityManager.register()
     }
 
     override fun onDisable() {
         OnlinePlayerManager.unregister()
+        ClientEntityManager.unregister()
     }
 }
