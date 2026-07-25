@@ -46,6 +46,8 @@ import org.bukkit.block.BlockType
 import org.bukkit.block.data.BlockData
 import org.bukkit.enchantments.Enchantment
 import org.bukkit.entity.*
+import org.bukkit.event.HandlerList
+import org.bukkit.event.Listener
 import org.bukkit.event.entity.PlayerDeathEvent
 import org.bukkit.inventory.Inventory
 import org.bukkit.inventory.ItemStack
@@ -1825,7 +1827,7 @@ fun <T> MutableList<T>.insertAll(values: Iterable<T>): MutableList<T> {
  * @param selector Selector
  * @return Maximums
  */
-inline fun <T, R : Comparable<R>> Iterable<T>.maxsBy(selector: (T) -> R): List<T> {
+inline fun <T, R: Comparable<R>> Iterable<T>.maxsBy(selector: (T) -> R): List<T> {
     val iterator = iterator()
     if (!iterator.hasNext()) return emptyList()
 
@@ -1858,7 +1860,7 @@ inline fun <T, R : Comparable<R>> Iterable<T>.maxsBy(selector: (T) -> R): List<T
  * @param selector Selector
  * @return Minimums
  */
-inline fun <T, R : Comparable<R>> Iterable<T>.minsBy(selector: (T) -> R): List<T> {
+inline fun <T, R: Comparable<R>> Iterable<T>.minsBy(selector: (T) -> R): List<T> {
     val iterator = iterator()
     if (!iterator.hasNext()) return emptyList()
 
@@ -1975,12 +1977,32 @@ inline fun <T> ArrayList<T>.fastRemoveIf(predicate: (T) -> Boolean) {
 //region Event
 
 /**
+ * Registers Event Listener
+ *
+ * @param plugin Java Plugin
+ * @return Listener
+ */
+fun <T: Listener> T.register(plugin: JavaPlugin) = also { listener ->
+    plugin.server.pluginManager.registerEvents(listener, plugin)
+}
+
+/**
+ * Unregisters Event Listener
+ *
+ * @return Listener
+ */
+fun <T: Listener> T.unregister() = also { listener ->
+    HandlerList.unregisterAll(listener)
+}
+
+/**
  * Cancels PlayerDeathEvent with death message
  */
 fun PlayerDeathEvent.cancel() {
     isCancelled = true
     deathMessage()?.let(Bukkit::broadcast)
 }
+
 
 //endregion
 
@@ -2180,10 +2202,10 @@ fun AreaManager.Area.toList() = listOf(
     boundingBoxEnd.x, boundingBoxEnd.y, boundingBoxEnd.z
 )
 
-fun <T : Comparable<T>> binaryListOf() =
+fun <T: Comparable<T>> binaryListOf() =
     BinaryList(emptyList<T>(), compareBy { it })
 
-fun <T : Comparable<T>> binaryListOf(vararg elements: T) =
+fun <T: Comparable<T>> binaryListOf(vararg elements: T) =
     BinaryList(elements.toMutableList(), compareBy { it })
 
 //endregion
@@ -2214,7 +2236,7 @@ fun JavaPlugin.registerCommandTree(
 /**
  * ArgumentBuilder::executes without 1
  */
-inline fun <T : ArgumentBuilder<CommandSourceStack, T>> T.execute(
+inline fun <T: ArgumentBuilder<CommandSourceStack, T>> T.execute(
     crossinline block: (CommandContext<CommandSourceStack>) -> Unit
 ): T = this.executes { ctx ->
     block(ctx)
@@ -2227,12 +2249,12 @@ inline fun <T : ArgumentBuilder<CommandSourceStack, T>> T.execute(
  * @param name Name
  * @param builder Literal Argument Builder
  */
-fun <T : ArgumentBuilder<CommandSourceStack, T>> T.node(
+fun <T: ArgumentBuilder<CommandSourceStack, T>> T.node(
     name: String,
     builder: LiteralArgumentBuilder<CommandSourceStack>.() -> Unit
 ): T = this.then(Commands.literal(name).apply(builder))
 
-fun <T : ArgumentBuilder<CommandSourceStack, T>> T.leaf(
+fun <T: ArgumentBuilder<CommandSourceStack, T>> T.leaf(
     name: String,
     action: (CommandContext<CommandSourceStack>) -> Unit
 ): T = this.then(Commands.literal(name).executes { ctx ->
@@ -2241,13 +2263,13 @@ fun <T : ArgumentBuilder<CommandSourceStack, T>> T.leaf(
 })
 
 
-fun <T : ArgumentBuilder<CommandSourceStack, T>, R : Any> T.argument(
+fun <T: ArgumentBuilder<CommandSourceStack, T>, R: Any> T.argument(
     name: String,
     type: ArgumentType<R>,
     builder: RequiredArgumentBuilder<CommandSourceStack, R>.() -> Unit
 ): T = this.then(Commands.argument(name, type).apply(builder))
 
-fun <T : ArgumentBuilder<CommandSourceStack, T>, R : Any> T.argumentLeaf(
+fun <T: ArgumentBuilder<CommandSourceStack, T>, R: Any> T.argumentLeaf(
     name: String,
     type: ArgumentType<R>,
     suggest: ((CommandContext<CommandSourceStack>) -> Collection<String>)? = null,
@@ -2260,7 +2282,7 @@ fun <T : ArgumentBuilder<CommandSourceStack, T>, R : Any> T.argumentLeaf(
 }
 
 
-fun <T : ArgumentBuilder<CommandSourceStack, T>, R : Any> T.arguments(
+fun <T: ArgumentBuilder<CommandSourceStack, T>, R: Any> T.arguments(
     vararg names: String,
     type: ArgumentType<R>,
     action: (CommandContext<CommandSourceStack>) -> Unit
@@ -2291,7 +2313,7 @@ fun <T> RequiredArgumentBuilder<CommandSourceStack, T>.suggest(
 }
 
 
-inline fun <T : ArgumentBuilder<CommandSourceStack, T>> T.executeAsPlayer(
+inline fun <T: ArgumentBuilder<CommandSourceStack, T>> T.executeAsPlayer(
     crossinline block: CommandContext<CommandSourceStack>.(Player) -> Unit
 ): T = this.executes { ctx ->
     val player = ctx.source.sender as? Player
@@ -2307,10 +2329,10 @@ inline fun <T : ArgumentBuilder<CommandSourceStack, T>> T.executeAsPlayer(
 }
 
 
-fun <T : ArgumentBuilder<CommandSourceStack, T>> T.requiresOp(): T =
+fun <T: ArgumentBuilder<CommandSourceStack, T>> T.requiresOp(): T =
     this.requires { it.sender.isOp }
 
-fun <T : ArgumentBuilder<CommandSourceStack, T>> T.requiresPermission(permission: String): T =
+fun <T: ArgumentBuilder<CommandSourceStack, T>> T.requiresPermission(permission: String): T =
     this.requires { it.sender.hasPermission(permission) }
 
 
