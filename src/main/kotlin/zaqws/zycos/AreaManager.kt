@@ -302,7 +302,7 @@ object AreaManager {
                     array = array.copyOf(capacity)
                 }
 
-                array[size++] = Position(x, y, z).raw
+                array[size++] = Position.pack(x, y, z)
             }
 
             return if (size == capacity) array

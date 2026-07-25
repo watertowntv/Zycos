@@ -1,3 +1,1 @@
-val pluginName: String by settings
-
-rootProject.name = pluginName
+rootProject.name = providers.gradleProperty("name").get()

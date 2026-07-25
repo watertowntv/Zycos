@@ -879,18 +879,19 @@ class PathfindingManager {
 
             val activeLocalPath = localPath
             if (activeLocalPath == null || localIndex >= activeLocalPath.size) {
-                val currentMacroPath = macroPath ?: run {
-                    if (searchJob?.isActive == true) {
-                        val direction = entity.location.directionTo(targetLocation)
-                        val intermediateLocation = entity.location.clone().add(
-                            direction.fastNormalize().multiply(2.0)
-                        )
-
-                        entity.pathfinder.moveTo(intermediateLocation, speed)
-                    }
-
-                    return
-                }
+//                val currentMacroPath = macroPath ?: run {
+//                    if (searchJob?.isActive == true) {
+//                        val direction = entity.location.directionTo(targetLocation)
+//                        val intermediateLocation = entity.location.clone().add(
+//                            direction.fastNormalize().multiply(2.0)
+//                        )
+//
+//                        entity.pathfinder.moveTo(intermediateLocation, speed)
+//                    }
+//
+//                    return
+//                }
+                val currentMacroPath = macroPath ?: return
 
                 if (macroIndex < currentMacroPath.size - 1) {
                     val currentChunkX = entity.location.blockX shr Constants.CHUNK_SHIFT
@@ -899,11 +900,14 @@ class PathfindingManager {
                     val nextNodePosition = AreaManager.Position(currentMacroPath[macroIndex + 1])
                     val nextChunkKey = getChunkKey(nextNodePosition.chunkX, nextNodePosition.chunkZ)
 
-                    val cached = latestSnapshots
-                    val snapshots = if (cached != null && cached.containsKey(currentChunkKey) && cached.containsKey(nextChunkKey)) {
-                        cached
-                    } else gridRegistry.captureNeighborSnapshots(entity.world, currentChunkX, currentChunkZ).also {
-                        latestSnapshots = it
+                    val cachedSnapshots = latestSnapshots
+                    val snapshots = if (cachedSnapshots != null && cachedSnapshots.containsKey(currentChunkKey) && cachedSnapshots.containsKey(nextChunkKey)) {
+                        cachedSnapshots
+                    } else {
+                        val newSnapshots = Long2ObjectOpenHashMap<ChunkSnapshot>()
+                        newSnapshots.putAll(gridRegistry.captureNeighborSnapshots(entity.world, currentChunkX, currentChunkZ))
+                        newSnapshots.putAll(gridRegistry.captureNeighborSnapshots(entity.world, nextNodePosition.chunkX, nextNodePosition.chunkZ))
+                        newSnapshots.also { latestSnapshots = it }
                     }
 
                     val pathfinder = cachedLocalPathfinder?.apply {
@@ -917,15 +921,16 @@ class PathfindingManager {
                         cachedLocalPathfinder = it
                     }
 
-                    if (isCalculatingLocalPath) {
-                        val direction = entity.location.directionTo(targetLocation)
-                        val intermediateLocation = entity.location.clone().add(
-                            direction.fastNormalize().multiply(2.0)
-                        )
-
-                        entity.pathfinder.moveTo(intermediateLocation, speed)
-                        return
-                    }
+//                    if (isCalculatingLocalPath) {
+//                        val direction = entity.location.directionTo(targetLocation)
+//                        val intermediateLocation = entity.location.clone().add(
+//                            direction.fastNormalize().multiply(2.0)
+//                        )
+//
+//                        entity.pathfinder.moveTo(intermediateLocation, speed)
+//                        return
+//                    }
+                    if (isCalculatingLocalPath) return
 
                     val currentPosition = entity.location.toPosition()
                     val targetNodePosition = AreaManager.Position(currentMacroPath[macroIndex + 1])
@@ -954,7 +959,7 @@ class PathfindingManager {
                             localPath = generated
                             localIndex = if (generated.size > 1) 1 else 0
 
-                            macroIndex++
+//                            macroIndex++
                             triggerMove()
                         }
                     }
@@ -964,14 +969,14 @@ class PathfindingManager {
                     macroPath = null
                     localPath = null
 
-                    if (searchJob?.isActive == true && lastTargetLocation != null) {
-                        val direction = entity.location.directionTo(lastTargetLocation!!)
-                        val intermediateLocation = entity.location.clone().add(
-                            direction.fastNormalize().multiply(2.0)
-                        )
-
-                        entity.pathfinder.moveTo(intermediateLocation, speed)
-                    }
+//                    if (searchJob?.isActive == true && lastTargetLocation != null) {
+//                        val direction = entity.location.directionTo(lastTargetLocation!!)
+//                        val intermediateLocation = entity.location.clone().add(
+//                            direction.fastNormalize().multiply(2.0)
+//                        )
+//
+//                        entity.pathfinder.moveTo(intermediateLocation, speed)
+//                    }
 
                     return
                 }
@@ -981,10 +986,20 @@ class PathfindingManager {
             val currentLocalPath = localPath ?: return
             val targetNodePosition = AreaManager.Position(currentLocalPath[localIndex])
 
-            if (entity.location.distanceSquared2D(targetNodePosition.toLocation()) < 2.25 &&
+//            if (entity.location.distanceSquared2D(targetNodePosition.toLocation()) < 2.25 &&
+//                abs(currentPosition.y - targetNodePosition.y) <= 1) {
+//                if (++localIndex >= currentLocalPath.size) navigateTo(targetLocation)
+//                else triggerMove()
+//
+//                return
+//            }
+            val targetNodeCenterLocation = targetNodePosition.toLocation(entity.world).add(0.5, 0.0, 0.5)
+            if (entity.location.distanceSquared2D(targetNodeCenterLocation) < 0.5625 &&
                 abs(currentPosition.y - targetNodePosition.y) <= 1) {
-                if (++localIndex >= currentLocalPath.size) navigateTo(targetLocation)
-                else triggerMove()
+                if (++localIndex >= currentLocalPath.size) {
+                    macroIndex++
+                    navigateTo(targetLocation)
+                } else triggerMove()
 
                 return
             }
@@ -1001,10 +1016,10 @@ class PathfindingManager {
 
 
         private fun triggerMove() {
-            val lPath = localPath ?: return
-            if (localIndex >= lPath.size) return
+            val activeLocalPath = localPath ?: return
+            if (localIndex >= activeLocalPath.size) return
 
-            val nextNodeLocation = AreaManager.Position(lPath[localIndex]).toLocation(entity.world).add(0.5, 0.0, 0.5)
+            val nextNodeLocation = AreaManager.Position(activeLocalPath[localIndex]).toLocation(entity.world).add(0.5, 0.0, 0.5)
             entity.pathfinder.moveTo(nextNodeLocation, speed)
         }
 

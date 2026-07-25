@@ -64,7 +64,8 @@ class ProjectileManager(plugin: JavaPlugin) {
         lateinit var location: Location
 
         private val maxRangeSquared = maxRange * maxRange
-        private var tick = 0
+        protected var tick = 0
+            private set
 
         private var historyIndex = 0
         private val locationHistory = Array(2) {
@@ -115,9 +116,9 @@ class ProjectileManager(plugin: JavaPlugin) {
 
         fun initialize() {
             locationHistory[0].clone(location)
-            locationHistory[1].clone(location)
-
             velocityHistory[0].clone(velocity)
+
+            locationHistory[1].clone(location)
             velocityHistory[1].clone(velocity)
 
             onInitialize()

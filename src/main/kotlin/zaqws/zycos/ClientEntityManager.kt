@@ -9,12 +9,14 @@ import it.unimi.dsi.fastutil.objects.ObjectOpenHashSet
 import net.minecraft.network.protocol.Packet
 import net.minecraft.network.protocol.game.ClientboundAddEntityPacket
 import net.minecraft.network.protocol.game.ClientboundRemoveEntitiesPacket
+import net.minecraft.network.protocol.game.ClientboundRotateHeadPacket
 import net.minecraft.network.protocol.game.ClientboundSetEntityDataPacket
 import net.minecraft.network.protocol.game.ClientboundSetEquipmentPacket
 import net.minecraft.network.protocol.game.ClientboundTeleportEntityPacket
 import net.minecraft.server.level.ServerPlayer
 import net.minecraft.world.entity.Entity
 import net.minecraft.world.entity.EntitySpawnReason
+import net.minecraft.world.entity.LivingEntity
 import net.minecraft.world.entity.PositionMoveRotation
 import org.bukkit.Location
 import org.bukkit.craftbukkit.CraftEquipmentSlot
@@ -26,6 +28,7 @@ import org.bukkit.entity.Player
 import org.bukkit.event.EventHandler
 import org.bukkit.event.HandlerList
 import org.bukkit.event.Listener
+import org.bukkit.event.player.PlayerChangedWorldEvent
 import org.bukkit.event.player.PlayerQuitEvent
 import org.bukkit.inventory.EquipmentSlot
 import org.bukkit.inventory.ItemStack
@@ -76,28 +79,34 @@ object ClientEntityManager : Listener {
     fun onPlayerQuit(event: PlayerQuitEvent) {
         val player = event.player
 
-        val iterator = entityMap.values.iterator()
-        while (iterator.hasNext()) {
-            iterator.next().unregisterViewer(player)
+        entityMap.values.forEach { entity ->
+            entity.unregisterViewer(player)
+        }
+    }
+
+    @EventHandler
+    fun onPlayerChangedWorld(event: PlayerChangedWorldEvent) {
+        val player = event.player
+
+        entityMap.values.forEach { entity ->
+            entity.unregisterViewer(player)
         }
     }
 
     fun removeAll() {
-        val iterator = entityMap.values.iterator()
-
-        while (iterator.hasNext()) {
-            iterator.next().destroy()
-            iterator.remove()
+        entityMap.values.forEach { entity ->
+            entity.destroy()
         }
+
+        entityMap.clear()
     }
 
 
     class ClientEntity internal constructor(
         @PublishedApi internal val nmsEntity: Entity
     ) {
-        private val _viewers = ObjectOpenHashSet<Player>()
         val viewers: Set<Player>
-            get() = _viewers.toSet()
+            field = ObjectOpenHashSet<Player>()
 
         val entityId: Int
             get() = nmsEntity.id
@@ -107,7 +116,7 @@ object ClientEntityManager : Listener {
 
 
         fun show(player: Player) {
-            if (!_viewers.add(player)) return
+            if (!viewers.add(player)) return
             val connection = player.handle.connection
 
             connection.send(ClientboundAddEntityPacket(
@@ -130,7 +139,7 @@ object ClientEntityManager : Listener {
         }
 
         fun hide(player: Player) {
-            if (!_viewers.remove(player)) return
+            if (!viewers.remove(player)) return
 
             player.handle.connection.send(ClientboundRemoveEntitiesPacket(
                 IntArrayList.of(entityId)
@@ -143,6 +152,7 @@ object ClientEntityManager : Listener {
         fun teleport(location: Location) {
             nmsEntity.setPos(location.x, location.y, location.z)
             nmsEntity.setRot(location.yaw, location.pitch)
+            nmsEntity.yHeadRot = location.yaw
 
             broadcastPacket(ClientboundTeleportEntityPacket.teleport(
                 entityId,
@@ -150,6 +160,12 @@ object ClientEntityManager : Listener {
                 emptySet(),
                 nmsEntity.onGround
             ))
+
+            if (nmsEntity is LivingEntity) {
+                val headYawByte = ((location.yaw * 256.0f) / 360.0f).toInt().toByte()
+
+                broadcastPacket(ClientboundRotateHeadPacket(nmsEntity, headYawByte))
+            }
         }
 
         fun equip(slot: EquipmentSlot, item: ItemStack) {
@@ -183,18 +199,18 @@ object ClientEntityManager : Listener {
         }
 
         internal fun destroy() {
-            if (_viewers.isEmpty()) return
+            if (viewers.isEmpty()) return
 
             val packet = ClientboundRemoveEntitiesPacket(IntArrayList.of(entityId))
-            for (player in _viewers) {
+            viewers.forEach { player ->
                 player.handle.connection.send(packet)
             }
 
-            _viewers.clear()
+            viewers.clear()
         }
 
         internal fun unregisterViewer(player: Player) {
-            _viewers.remove(player)
+            viewers.remove(player)
         }
 
         private fun sendPacket(player: Player) {
@@ -205,7 +221,7 @@ object ClientEntityManager : Listener {
 
         @PublishedApi
         internal fun broadcastPacket(packet: Packet<*>) {
-            for (player in _viewers) {
+            viewers.forEach { player ->
                 player.handle.connection.send(packet)
             }
         }
