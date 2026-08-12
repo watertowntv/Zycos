@@ -2042,12 +2042,13 @@ fun createConfigFile(instance: JavaPlugin): Boolean {
         instance.dataFolder.toString() + File.separator + "config.yml"
     )
 
-    if (!file.exists() || instance.config[instance.pluginMeta.name] == null) instance.config.apply {
-        addDefault(
+    if (!file.exists() || instance.config[instance.pluginMeta.name] == null) instance.config.let { config ->
+        config.addDefault(
             instance.pluginMeta.name,
             "by ${instance.pluginMeta.authors.joinToString(", ")}"
         )
-        options().copyDefaults(true)
+
+        config.options().copyDefaults(true)
         instance.saveConfig()
 
         return true
