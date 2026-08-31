@@ -96,8 +96,13 @@ class PersistentItemDataManager<T: PersistentItemDataManager.PersistentItemData>
             dataKey,
             PersistentDataType.BYTE_ARRAY
         )
-        val data = if (byteArray != null) cbor.decodeFromByteArray(serializer, byteArray)
-        else defaultFactory()
+        val data = if (byteArray != null) {
+            runCatching {
+                cbor.decodeFromByteArray(serializer, byteArray)
+            }.getOrElse {
+                defaultFactory()
+            }
+        } else defaultFactory()
 
         entry = CacheEntry(data, version)
         cache.put(uuid, entry)

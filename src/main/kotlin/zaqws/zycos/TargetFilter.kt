@@ -21,7 +21,7 @@ class TargetFilter(
         if (entity in target.passengers) return false
 
         if (target.isInvulnerable) return false
-        if (target.isValid && target.isDead) return false
+        if (!target.isValid || target.isDead) return false
         if (target is Player && !target.isDamageable) return false
 
         if (team == null || team.allowFriendlyFire()) return true

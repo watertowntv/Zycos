@@ -789,8 +789,9 @@ fun String.capitalizeWords() = lowercase()
  *
  * @return Random UUID-like String
  */
+@Suppress("SuspiciousCallOnCollectionToAddOrRemovePath")
 fun getRandomString(length: Int): String {
-    val allowedChars = ('A'..'Z').plusElement('a'..'z').plusElement('0'..'9')
+    val allowedChars = ('A'..'Z') + ('a'..'z') + ('0'..'9')
 
     return (1..length).map {
         allowedChars.random()
@@ -813,8 +814,6 @@ fun divmod(a: Int, b: Int) = a / b to a % b
  * @return Pair of Minutes and Seconds
  */
 fun convertToTime(time: String): Pair<Int, Int> {
-    assert(time.count { it == ':' } == 1)
-
     val index = time.indexOf(":")
 
     if (index == -1) {
@@ -938,7 +937,7 @@ fun LivingEntity.getNearestEntity(range: Double): Entity? =
         .asSequence()
         .filter {
             it !== this && this !in it.passengers
-        }.minBy {
+        }.minByOrNull {
             location.distanceSquared(it.location)
         }
 
@@ -1168,8 +1167,9 @@ fun PlayerInventory.addItem(itemStack: ItemStack, silent: Boolean): Int {
         return -1
     }
 
-    for (i in 0 until size) getItem(i)?.let { item ->
+    for (i in 0 until size) {
         if (i == heldItemSlot) continue
+        if (getItem(i)?.isEmpty == false) continue
 
         setItem(i, itemStack)
 
@@ -1454,9 +1454,9 @@ fun Vector.clip(n: Double): Vector {
 fun Vector.sign(n: Double = 1.0): Vector {
     val e = Vector.getEpsilon()
 
-    x = if(x > e) n else if(x < e) -n else 0.0
-    y = if(y > e) n else if(y < e) -n else 0.0
-    z = if(z > e) n else if(z < e) -n else 0.0
+    x = if (x > e) n else if (x < -e) -n else 0.0
+    y = if (y > e) n else if (y < -e) -n else 0.0
+    z = if (z > e) n else if (z < -e) -n else 0.0
 
     return this
 }

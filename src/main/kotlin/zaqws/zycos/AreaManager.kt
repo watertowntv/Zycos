@@ -113,17 +113,17 @@ object AreaManager {
             z.toDouble()
         )
 
-        fun distanceSquared(target: Position): Int {
-            val dx = x - target.x
-            val dy = y - target.y
-            val dz = z - target.z
+        fun distanceSquared(target: Position): Long {
+            val dx = x.toLong() - target.x
+            val dy = y.toLong() - target.y
+            val dz = z.toLong() - target.z
 
             return dx * dx + dy * dy + dz * dz
         }
 
-        fun distanceSquared2D(target: Position): Int {
-            val dx = x - target.x
-            val dz = z - target.z
+        fun distanceSquared2D(target: Position): Long {
+            val dx = x.toLong() - target.x
+            val dz = z.toLong() - target.z
 
             return dx * dx + dz * dz
         }

@@ -24,10 +24,10 @@ class ProjectileManager(plugin: JavaPlugin) {
         startLocation: Location,
         initialVelocity: Vector? = null
     ) {
-        projectile.startLocation = startLocation
-        projectile.location = startLocation
+        projectile.startLocation = startLocation.clone()
+        projectile.location = startLocation.clone()
 
-        if (initialVelocity != null) projectile.velocity = initialVelocity
+        if (initialVelocity != null) projectile.velocity = initialVelocity.clone()
 
         projectile.initialize()
 
@@ -46,6 +46,7 @@ class ProjectileManager(plugin: JavaPlugin) {
                 if (i != lastIndex) projectiles[i] = projectiles[lastIndex]
 
                 projectiles.removeLast()
+                projectile.onPoolReturn?.invoke(projectile)
             } else i++
         }
     }
@@ -110,8 +111,6 @@ class ProjectileManager(plugin: JavaPlugin) {
             removed = true
 
             onRemove()
-
-            onPoolReturn?.invoke(this)
         }
 
         fun initialize() {

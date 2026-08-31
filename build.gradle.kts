@@ -7,7 +7,7 @@ plugins {
     kotlin("plugin.serialization") version "2.4.10"
 
     id("com.gradleup.shadow") version "9.6.1"
-    id("io.papermc.paperweight.userdev") version "2.0.0-beta.21"
+    id("io.papermc.paperweight.userdev") version "2.0.0-beta.22"
     id("maven-publish")
 }
 
@@ -24,13 +24,14 @@ dependencies {
     implementation(kotlin("stdlib"))
     implementation(kotlin("reflect"))
 
-    compileOnly("org.junit.jupiter:junit-jupiter:6.1.2")
+    testImplementation("org.junit.jupiter:junit-jupiter:6.1.2")
+
     compileOnly("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.11.0")
     compileOnly("org.jetbrains.kotlinx:kotlinx-serialization-cbor:1.11.0")
 
-    compileOnly("io.papermc.paper:paper-api:26.2.build.+")
-
     paperweight.paperDevBundle("26.2.build.+")
+
+
 }
 
 java {
