@@ -133,7 +133,7 @@ class PathfindingManager {
                             isBelongToChunk(edge.targetEntranceId, targetChunkX, targetChunkZ)
                         }
 
-                        if (entrance.interEdges.isEmpty()) {
+                        if (entrance.interEdges.isEmpty() && entrance.intraEdges.isEmpty()) {
                             deadEntranceIds.add(neighborEntranceId)
                             entrances.remove(neighborEntranceId)
                         }
@@ -341,7 +341,7 @@ class PathfindingManager {
 
         private fun isDiagonalBlocked(current: AreaManager.Position, deltaX: Int, deltaZ: Int, targetY: Int): Boolean {
             val minHeight = current.y.coerceAtMost(targetY)
-            val maxHeight = current.y.coerceAtLeast(targetY) + 1
+            val maxHeight = current.y.coerceAtLeast(targetY) + mobHeight - 1
 
             for (checkY in minHeight..maxHeight) {
                 if (getBlockMaterial(current.x + deltaX, checkY, current.z).isSolid) return true
@@ -490,7 +490,7 @@ class PathfindingManager {
                 val neighborSnapshots = withContext(CoroutineManager.PaperDispatcher(plugin)) {
                     captureNeighborSnapshots(world, chunkX, chunkZ)
                 }
-                if (neighborSnapshots.size < 9) return
+                if (!neighborSnapshots.containsKey(chunkKey)) return
 
                 withContext(Dispatchers.Default) {
                     hierarchicalGrid.hierarchicalLock.writeLock().lock()
@@ -681,7 +681,7 @@ class PathfindingManager {
                 )
 
                 if (directPath.isNotEmpty()) {
-                    return@withContext longArrayOf(source.raw, target.raw)
+                    return@withContext directPath
                 }
             }
 
@@ -868,11 +868,11 @@ class PathfindingManager {
             val threshold = 1.5
 
             if ((mPath == null || mPath.isEmpty() || macroIndex >= mPath.size) &&
-                entity.location.distanceSquared(targetLocation) <= threshold &&
-                lastTarget != null && lastTarget.distanceSquared(targetLocation) <= threshold) {
+                entity.location.distanceSquared(targetLocation) <= threshold * threshold &&
+                lastTarget != null && lastTarget.distanceSquared(targetLocation) <= threshold * threshold) {
                 return
             }
-            if (mPath == null || macroIndex >= mPath.size || lastTarget == null || lastTarget.distanceSquared(targetLocation) > threshold)
+            if (mPath == null || macroIndex >= mPath.size || lastTarget == null || lastTarget.distanceSquared(targetLocation) > threshold * threshold)
                 if (!failed || System.currentTimeMillis() - lastFailureTime > 1000) {
                     requestPathAsync(entity.location.toPosition(), targetLocation.toPosition(), targetLocation)
                 }
@@ -959,7 +959,7 @@ class PathfindingManager {
                             localPath = generated
                             localIndex = if (generated.size > 1) 1 else 0
 
-//                            macroIndex++
+                            macroIndex++
                             triggerMove()
                         }
                     }
@@ -994,7 +994,7 @@ class PathfindingManager {
 //                return
 //            }
             val targetNodeCenterLocation = targetNodePosition.toLocation(entity.world).add(0.5, 0.0, 0.5)
-            if (entity.location.distanceSquared2D(targetNodeCenterLocation) < 0.5625 &&
+            if (entity.location.distanceSquared2D(targetNodeCenterLocation) < 2.25 &&
                 abs(currentPosition.y - targetNodePosition.y) <= 1) {
                 if (++localIndex >= currentLocalPath.size) {
                     macroIndex++

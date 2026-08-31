@@ -759,8 +759,11 @@ fun String.splitLines(maxLength: Int = 16): List<String> {
  * @param level Level
  * @return Amount of exp required
  */
-fun expByLevel(level: Int) = level * (level + 6)
-
+fun expByLevel(level: Int) = when {
+    level <= 16 -> level * (level + 6)
+    level <= 31 -> (2.5 * level * level - 40.5 * level + 360).toInt()
+    else -> (4.5 * level * level - 162.5 * level + 2220).toInt()
+}
 
 /**
  * Returns only digit characters
