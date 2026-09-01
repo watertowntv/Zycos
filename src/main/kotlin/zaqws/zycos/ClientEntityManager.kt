@@ -2,6 +2,7 @@
 
 package zaqws.zycos
 
+import com.destroystokyo.paper.event.player.PlayerUseUnknownEntityEvent
 import com.mojang.datafixers.util.Pair
 import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap
 import it.unimi.dsi.fastutil.ints.IntArrayList
@@ -32,9 +33,12 @@ import org.bukkit.event.player.PlayerChangedWorldEvent
 import org.bukkit.event.player.PlayerQuitEvent
 import org.bukkit.inventory.EquipmentSlot
 import org.bukkit.inventory.ItemStack
+import org.bukkit.util.Vector
 
 object ClientEntityManager : Listener {
     private val entityMap = Int2ObjectOpenHashMap<ClientEntity>()
+
+    private var interactionHandler: InteractionHandler? = null
 
 
     internal fun register() {
@@ -44,6 +48,7 @@ object ClientEntityManager : Listener {
     }
 
     internal fun unregister() {
+        interactionHandler = null
         removeAll()
 
         HandlerList.unregisterAll(this)
@@ -71,9 +76,15 @@ object ClientEntityManager : Listener {
     }
 
     fun getEntity(entityId: Int): ClientEntity? = entityMap.get(entityId)
+
     fun removeEntity(entityId: Int) {
-        entityMap.remove(entityId)?.remove()
+        entityMap.remove(entityId)?.destroy()
     }
+
+    fun setInteractionHandler(handler: InteractionHandler?) {
+        interactionHandler = handler
+    }
+
 
     @EventHandler
     fun onPlayerQuit(event: PlayerQuitEvent) {
@@ -93,12 +104,52 @@ object ClientEntityManager : Listener {
         }
     }
 
+    @EventHandler
+    fun onPlayerUseUnknownEntity(event: PlayerUseUnknownEntityEvent) {
+        val entity = entityMap.get(event.entityId) ?: return
+
+        if (event.player !in entity.viewers) return
+
+        val interaction = if (event.isAttack) {
+            Interaction.Attack
+        } else {
+            Interaction.Interact(
+                hand = event.hand,
+                clickedRelativePosition = event.clickedRelativePosition
+            )
+        }
+
+        interactionHandler?.handle(
+            event.player,
+            entity,
+            interaction
+        )
+    }
+
     fun removeAll() {
         entityMap.values.forEach { entity ->
             entity.destroy()
         }
 
         entityMap.clear()
+    }
+
+
+    fun interface InteractionHandler {
+        fun handle(
+            player: Player,
+            entity: ClientEntity,
+            interaction: Interaction
+        )
+    }
+
+    sealed interface Interaction {
+        data object Attack : Interaction
+
+        data class Interact(
+            val hand: EquipmentSlot,
+            val clickedRelativePosition: Vector?
+        ) : Interaction
     }
 
 
@@ -117,6 +168,7 @@ object ClientEntityManager : Listener {
 
         fun show(player: Player) {
             if (!viewers.add(player)) return
+
             val connection = player.handle.connection
 
             connection.send(ClientboundAddEntityPacket(
@@ -132,8 +184,10 @@ object ClientEntityManager : Listener {
                 nmsEntity.deltaMovement,
                 nmsEntity.yHeadRot.toDouble()
             ))
+
             sendPacket(player)
         }
+
         fun show(players: Iterable<Player>) {
             players.forEach(this::show)
         }
@@ -141,54 +195,104 @@ object ClientEntityManager : Listener {
         fun hide(player: Player) {
             if (!viewers.remove(player)) return
 
-            player.handle.connection.send(ClientboundRemoveEntitiesPacket(
-                IntArrayList.of(entityId)
-            ))
+            player.handle.connection.send(
+                ClientboundRemoveEntitiesPacket(
+                    IntArrayList.of(entityId)
+                )
+            )
         }
+
         fun hide(players: Iterable<Player>) {
             players.forEach(this::hide)
         }
 
         fun teleport(location: Location) {
-            nmsEntity.setPos(location.x, location.y, location.z)
-            nmsEntity.setRot(location.yaw, location.pitch)
+            nmsEntity.setPos(
+                location.x,
+                location.y,
+                location.z
+            )
+
+            nmsEntity.setRot(
+                location.yaw,
+                location.pitch
+            )
+
             nmsEntity.yHeadRot = location.yaw
 
-            broadcastPacket(ClientboundTeleportEntityPacket.teleport(
-                entityId,
-                PositionMoveRotation.of(nmsEntity),
-                emptySet(),
-                nmsEntity.onGround
-            ))
+            broadcastPacket(
+                ClientboundTeleportEntityPacket.teleport(
+                    entityId,
+                    PositionMoveRotation.of(nmsEntity),
+                    emptySet(),
+                    nmsEntity.onGround
+                )
+            )
 
             if (nmsEntity is LivingEntity) {
-                val headYawByte = ((location.yaw * 256.0f) / 360.0f).toInt().toByte()
+                val headYawByte =
+                    (
+                            location.yaw *
+                                    256.0f /
+                                    360.0f
+                            ).toInt().toByte()
 
-                broadcastPacket(ClientboundRotateHeadPacket(nmsEntity, headYawByte))
+                broadcastPacket(
+                    ClientboundRotateHeadPacket(
+                        nmsEntity,
+                        headYawByte
+                    )
+                )
             }
         }
 
-        fun equip(slot: EquipmentSlot, item: ItemStack) {
-            val nmsSlot = CraftEquipmentSlot.getNMS(slot)
-            val nmsItem = CraftItemStack.asNMSCopy(item) ?: return
+        fun equip(
+            slot: EquipmentSlot,
+            item: ItemStack
+        ) {
+            val nmsSlot =
+                CraftEquipmentSlot.getNMS(slot)
 
-            val packet = ClientboundSetEquipmentPacket(
-                entityId,
-                listOf(Pair(nmsSlot, nmsItem))
-            )
+            val nmsItem =
+                CraftItemStack.asNMSCopy(item)
+                    ?: return
+
+            val packet =
+                ClientboundSetEquipmentPacket(
+                    entityId,
+                    listOf(
+                        Pair(
+                            nmsSlot,
+                            nmsItem
+                        )
+                    )
+                )
 
             broadcastPacket(packet)
         }
 
-        inline fun <reified E : org.bukkit.entity.Entity> update(crossinline block: E.() -> Unit) {
-            val bukkit = nmsEntity.bukkitEntity
+        inline fun <
+                reified E : org.bukkit.entity.Entity
+                > update(
+            crossinline block: E.() -> Unit
+        ) {
+            val bukkit =
+                nmsEntity.bukkitEntity
 
             if (bukkit !is E) return
+
             bukkit.block()
 
-            val dirty = nmsEntity.entityData.packDirty()
+            val dirty =
+                nmsEntity.entityData.packDirty()
+
             if (dirty != null) {
-                broadcastPacket(ClientboundSetEntityDataPacket(entityId, dirty))
+                broadcastPacket(
+                    ClientboundSetEntityDataPacket(
+                        entityId,
+                        dirty
+                    )
+                )
             }
         }
 
@@ -201,7 +305,11 @@ object ClientEntityManager : Listener {
         internal fun destroy() {
             if (viewers.isEmpty()) return
 
-            val packet = ClientboundRemoveEntitiesPacket(IntArrayList.of(entityId))
+            val packet =
+                ClientboundRemoveEntitiesPacket(
+                    IntArrayList.of(entityId)
+                )
+
             viewers.forEach { player ->
                 player.handle.connection.send(packet)
             }
@@ -214,9 +322,15 @@ object ClientEntityManager : Listener {
         }
 
         private fun sendPacket(player: Player) {
-            val packedData = nmsEntity.entityData.packAll()
+            val packedData =
+                nmsEntity.entityData.packAll()
 
-            player.handle.connection.send(ClientboundSetEntityDataPacket(entityId, packedData))
+            player.handle.connection.send(
+                ClientboundSetEntityDataPacket(
+                    entityId,
+                    packedData
+                )
+            )
         }
 
         @PublishedApi
