@@ -7,8 +7,23 @@ import kotlinx.coroutines.*
 import zaqws.zycos.simulated.command.SimulatedCommand
 import zaqws.zycos.simulated.command.SimulatedCommandQueue
 import zaqws.zycos.simulated.entity.*
+import zaqws.zycos.simulated.combat.SimulatedCombatSystem
+import zaqws.zycos.simulated.combat.SimulatedDamage
+import zaqws.zycos.simulated.external.SimulatedExternalAction
+import zaqws.zycos.simulated.external.SimulatedExternalActionQueue
+import zaqws.zycos.simulated.external.SimulatedExternalFrame
 import zaqws.zycos.simulated.goal.SimulatedGoalSet
+import zaqws.zycos.simulated.goal.SimulatedGoalSystem
+import zaqws.zycos.simulated.goal.SimulatedLookSystem
+import zaqws.zycos.simulated.map.SimulatedMap
 import zaqws.zycos.simulated.math.SimulatedVector3
+import zaqws.zycos.simulated.navigation.SimulatedNavigationService
+import zaqws.zycos.simulated.navigation.SimulatedNavigationSystem
+import zaqws.zycos.simulated.navigation.SimulatedPathFollower
+import zaqws.zycos.simulated.navigation.hpa.SimulatedHpaPathfinder
+import zaqws.zycos.simulated.physics.SimulatedPhysicsConfig
+import zaqws.zycos.simulated.physics.SimulatedPhysicsSystem
+import zaqws.zycos.simulated.physics.SimulatedSeparationSystem
 import zaqws.zycos.simulated.snapshot.SimulatedEvent
 import zaqws.zycos.simulated.snapshot.SimulatedEventQueue
 import zaqws.zycos.simulated.snapshot.SimulatedFrame
@@ -16,6 +31,11 @@ import zaqws.zycos.simulated.snapshot.SimulatedFramePublisher
 import zaqws.zycos.simulated.system.SimulatedSystem
 import zaqws.zycos.simulated.system.SimulatedSystemContext
 import zaqws.zycos.simulated.system.SimulatedSystemPipeline
+import zaqws.zycos.simulated.system.SimulatedInterestSystem
+import zaqws.zycos.simulated.system.SimulatedSpatialSystem
+import zaqws.zycos.simulated.spatial.SimulatedEntityQuery
+import zaqws.zycos.simulated.spatial.SimulatedInterestIndex
+import zaqws.zycos.simulated.spatial.SimulatedSpatialIndex
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicInteger
@@ -25,6 +45,7 @@ import kotlin.math.ceil
 import kotlin.time.Duration.Companion.milliseconds
 
 class SimulatedEngine internal constructor(
+    val map: SimulatedMap,
     val config: SimulatedConfig
 ) : SimulatedEntityController, AutoCloseable {
     companion object {
@@ -57,6 +78,10 @@ class SimulatedEngine internal constructor(
     private val lifecycleState = AtomicReference(LifecycleState.CREATED)
     private val failureReference = AtomicReference<Throwable?>(null)
     private val tickCounter = AtomicLong(0L)
+    private val measuredTickCount = AtomicLong(0L)
+    private val totalTickNanoseconds = AtomicLong(0L)
+    private val latestTickNanoseconds = AtomicLong(0L)
+    private val maximumTickNanoseconds = AtomicLong(0L)
 
     private val reservedEntityId = AtomicInteger(1)
     private val knownEntityIds = ConcurrentHashMap.newKeySet<Int>()
@@ -64,15 +89,34 @@ class SimulatedEngine internal constructor(
 
     private val commandQueue = SimulatedCommandQueue()
     private val framePublisher = SimulatedFramePublisher()
-    private val eventQueue = SimulatedEventQueue()
+    private val eventQueue =
+        SimulatedEventQueue(
+            config.maximumQueuedEvents
+        )
+
+    private val visualEventQueue =
+        SimulatedEventQueue(
+            config.maximumQueuedEvents
+        )
+
+    private val externalActionQueue =
+        SimulatedExternalActionQueue(
+            config.maximumQueuedExternalActions
+        )
+
+    private val pendingExternalFrame =
+        AtomicReference(
+            SimulatedExternalFrame.EMPTY
+        )
+
+    private var currentExternalFrame =
+        SimulatedExternalFrame.EMPTY
 
     internal val entityStore = SimulatedEntityStore(
         config.initialEntityCapacity
     )
 
     internal val goalSets = Int2ObjectOpenHashMap<SimulatedGoalSet>()
-
-    private val systemPipeline = SimulatedSystemPipeline()
 
     private val simulationDispatcher: ExecutorCoroutineDispatcher =
         Executors.newSingleThreadExecutor { runnable ->
@@ -95,6 +139,128 @@ class SimulatedEngine internal constructor(
                 isDaemon = true
             }
         }.asCoroutineDispatcher()
+
+    private val physicsConfig =
+        SimulatedPhysicsConfig(
+            gravityPerTick =
+                config.gravityPerTick,
+            airDrag =
+                config.airDrag,
+            groundFriction =
+                config.groundFriction,
+            jumpVelocity =
+                config.jumpVelocity,
+            entityMass =
+                config.entityMass
+        )
+
+    private val spatialIndex =
+        SimulatedSpatialIndex(
+            config.spatialCellSize
+        )
+
+    private val entityQuery =
+        SimulatedEntityQuery(
+            entityStore,
+            spatialIndex
+        )
+
+    private val interestIndex =
+        SimulatedInterestIndex(
+            config.fullSimulationRadius
+        )
+
+    private val goalSystem =
+        SimulatedGoalSystem(
+            entityStore,
+            entityQuery,
+            ::goalSet,
+            ::externalFrame
+        )
+
+    private val pathFollower =
+        SimulatedPathFollower(
+            entityStore,
+            physicsConfig
+        )
+
+    private val navigationService =
+        SimulatedNavigationService(
+            map = map,
+            pathfinder =
+                SimulatedHpaPathfinder(),
+            workerCount =
+                config.navigationWorkerCount,
+            dispatcher =
+                navigationDispatcher
+        )
+
+    private val navigationSystem =
+        SimulatedNavigationSystem(
+            entityStore = entityStore,
+            map = map,
+            goalSystem = goalSystem,
+            navigationService =
+                navigationService,
+            pathFollower =
+                pathFollower,
+            config = config
+        )
+
+    private val combatSystem =
+        SimulatedCombatSystem(
+            entityStore,
+            goalSystem,
+            ::offerEvent,
+            ::externalFrame,
+            externalActionQueue::offer
+        )
+
+    private val physicsSystem =
+        SimulatedPhysicsSystem(
+            entityStore,
+            map,
+            physicsConfig
+        ) { entityId, damage, tick ->
+            combatSystem.damage(
+                SimulatedDamage(
+                    targetEntityId =
+                        entityId,
+                    amount = damage
+                ),
+                tick
+            )
+        }
+
+    private val systemPipeline =
+        SimulatedSystemPipeline(
+            listOf(
+                SimulatedSpatialSystem(
+                    entityStore,
+                    spatialIndex
+                ),
+                SimulatedInterestSystem(
+                    entityStore,
+                    interestIndex,
+                    ::externalFrame
+                ),
+                goalSystem,
+                navigationSystem,
+                pathFollower,
+                SimulatedLookSystem(
+                    entityStore,
+                    goalSystem
+                ),
+                SimulatedSeparationSystem(
+                    entityStore = entityStore,
+                    spatialIndex = spatialIndex,
+                    config = physicsConfig,
+                    requireFullSimulation = false
+                ),
+                physicsSystem,
+                combatSystem
+            )
+        )
 
     private val engineJob = SupervisorJob()
 
@@ -124,6 +290,29 @@ class SimulatedEngine internal constructor(
 
     val entityCount: Int
         get() = latestFrame.size
+
+    fun timingSnapshot(): SimulatedTimingSnapshot {
+        val measuredTicks =
+            measuredTickCount.get()
+
+        val totalNanoseconds =
+            totalTickNanoseconds.get()
+
+        return SimulatedTimingSnapshot(
+            measuredTicks = measuredTicks,
+            latestTickNanoseconds =
+                latestTickNanoseconds.get(),
+            averageTickNanoseconds =
+                if (measuredTicks == 0L) {
+                    0L
+                } else {
+                    totalNanoseconds /
+                            measuredTicks
+                },
+            maximumTickNanoseconds =
+                maximumTickNanoseconds.get()
+        )
+    }
 
     fun start(): SimulatedEngine {
         synchronized(lifecycleLock) {
@@ -255,6 +444,67 @@ class SimulatedEngine internal constructor(
         )
 
         return events
+    }
+
+    internal fun drainVisualEvents(
+        maximumEvents: Int
+    ): List<SimulatedEvent> {
+        require(maximumEvents >= 0)
+
+        val events =
+            ArrayList<SimulatedEvent>()
+
+        visualEventQueue.drainTo(
+            events,
+            maximumEvents
+        )
+
+        return events
+    }
+
+    fun submitExternalFrame(
+        frame: SimulatedExternalFrame
+    ): Boolean {
+        check(!isClosed) {
+            "SimulatedEngine is closed"
+        }
+
+        while (true) {
+            val currentFrame =
+                pendingExternalFrame.get()
+
+            if (
+                frame.sequence <
+                currentFrame.sequence
+            ) {
+                return false
+            }
+
+            if (
+                pendingExternalFrame.compareAndSet(
+                    currentFrame,
+                    frame
+                )
+            ) {
+                return true
+            }
+        }
+    }
+
+    fun drainExternalActions(
+        maximumActions: Int = Int.MAX_VALUE
+    ): List<SimulatedExternalAction> {
+        require(maximumActions >= 0)
+
+        val actions =
+            ArrayList<SimulatedExternalAction>()
+
+        externalActionQueue.drainTo(
+            actions,
+            maximumActions
+        )
+
+        return actions
     }
 
     override fun exists(
@@ -424,6 +674,10 @@ class SimulatedEngine internal constructor(
     ): SimulatedGoalSet? =
         goalSets.get(entityId.value)
 
+    private fun externalFrame():
+            SimulatedExternalFrame =
+        currentExternalFrame
+
     private suspend fun runSimulationLoop() {
         val tickDurationNanoseconds =
             config.simulationTickDurationNanoseconds
@@ -463,7 +717,13 @@ class SimulatedEngine internal constructor(
     }
 
     private fun runSimulationTick() {
+        val startNanoseconds =
+            System.nanoTime()
+
         val currentTick = tickCounter.incrementAndGet()
+
+        currentExternalFrame =
+            pendingExternalFrame.get()
 
         processCommands(
             currentTick
@@ -480,6 +740,41 @@ class SimulatedEngine internal constructor(
         publishFrame(
             currentTick
         )
+
+        recordTickDuration(
+            System.nanoTime() -
+                    startNanoseconds
+        )
+    }
+
+    private fun recordTickDuration(
+        durationNanoseconds: Long
+    ) {
+        latestTickNanoseconds.set(
+            durationNanoseconds
+        )
+
+        totalTickNanoseconds.addAndGet(
+            durationNanoseconds
+        )
+
+        measuredTickCount.incrementAndGet()
+
+        while (true) {
+            val previousMaximum =
+                maximumTickNanoseconds.get()
+
+            if (
+                durationNanoseconds <=
+                previousMaximum ||
+                maximumTickNanoseconds.compareAndSet(
+                    previousMaximum,
+                    durationNanoseconds
+                )
+            ) {
+                return
+            }
+        }
     }
 
     private fun processCommands(
@@ -558,7 +853,7 @@ class SimulatedEngine internal constructor(
             )
         }
 
-        eventQueue.offer(
+        offerEvent(
             SimulatedEvent.Spawn(
                 currentTick,
                 command.entityId
@@ -580,7 +875,7 @@ class SimulatedEngine internal constructor(
 
         if (!removed) return
 
-        eventQueue.offer(
+        offerEvent(
             SimulatedEvent.Remove(
                 currentTick,
                 command.entityId
@@ -648,46 +943,15 @@ class SimulatedEngine internal constructor(
         command: SimulatedCommand.Damage,
         currentTick: Long
     ) {
-        val slot = entityStore.slotOf(
-            command.entityId
+        combatSystem.damage(
+            SimulatedDamage(
+                targetEntityId =
+                    command.entityId,
+                amount =
+                    command.amount
+            ),
+            currentTick
         )
-
-        if (slot < 0) return
-
-        val wasDead = entityStore.hasFlag(
-            slot,
-            SimulatedEntityFlag.DEAD
-        )
-
-        val appliedDamage = entityStore.damage(
-            slot,
-            command.amount
-        )
-
-        if (appliedDamage <= 0.0) return
-
-        eventQueue.offer(
-            SimulatedEvent.Hurt(
-                tick = currentTick,
-                entityId = command.entityId,
-                damage = appliedDamage
-            )
-        )
-
-        if (
-            !wasDead &&
-            entityStore.hasFlag(
-                slot,
-                SimulatedEntityFlag.DEAD
-            )
-        ) {
-            eventQueue.offer(
-                SimulatedEvent.Death(
-                    currentTick,
-                    command.entityId
-                )
-            )
-        }
     }
 
     private fun processHeal(
@@ -763,41 +1027,25 @@ class SimulatedEngine internal constructor(
         val presentationIds = IntArray(size)
         val flags = LongArray(size)
 
-        entityStore.forEachSlot { slot ->
-            val entityId = entityStore.entityIdAt(slot)
-            val position = entityStore.position(slot)
-            val velocity = entityStore.velocity(slot)
-            val hitbox = entityStore.hitbox(slot)
-
-            entityIds[slot] = entityId.value
-
-            positionX[slot] = position.x
-            positionY[slot] = position.y
-            positionZ[slot] = position.z
-
-            velocityX[slot] = velocity.x
-            velocityY[slot] = velocity.y
-            velocityZ[slot] = velocity.z
-
-            yaw[slot] = entityStore.yaw(slot)
-            pitch[slot] = entityStore.pitch(slot)
-
-            health[slot] = entityStore.health(slot)
-            maximumHealth[slot] =
-                entityStore.maximumHealth(slot)
-
-            hitboxWidth[slot] = hitbox.width
-            hitboxHeight[slot] = hitbox.height
-
-            teams[slot] =
-                entityStore.team(slot).value
-
-            presentationIds[slot] =
-                entityStore.presentationId(slot).value
-
-            flags[slot] =
-                entityStore.flags(slot).bits
-        }
+        entityStore.copyFrameStateTo(
+            entityIds = entityIds,
+            positionX = positionX,
+            positionY = positionY,
+            positionZ = positionZ,
+            velocityX = velocityX,
+            velocityY = velocityY,
+            velocityZ = velocityZ,
+            yaw = yaw,
+            pitch = pitch,
+            health = health,
+            maximumHealth = maximumHealth,
+            hitboxWidth = hitboxWidth,
+            hitboxHeight = hitboxHeight,
+            teams = teams,
+            presentationIds =
+                presentationIds,
+            flags = flags
+        )
 
         framePublisher.publish(
             SimulatedFrame(
@@ -866,6 +1114,13 @@ class SimulatedEngine internal constructor(
         return -1
     }
 
+    private fun offerEvent(
+        event: SimulatedEvent
+    ) {
+        eventQueue.offer(event)
+        visualEventQueue.offer(event)
+    }
+
     override fun close() {
         val job: Job?
 
@@ -891,8 +1146,12 @@ class SimulatedEngine internal constructor(
 
         simulationScope.cancel()
 
+        navigationService.close()
+
         commandQueue.clear()
         eventQueue.clear()
+        visualEventQueue.clear()
+        externalActionQueue.clear()
         framePublisher.clear()
 
         entityStore.clear()

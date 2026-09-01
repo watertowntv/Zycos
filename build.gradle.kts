@@ -50,6 +50,9 @@ tasks {
     compileKotlin {
         compilerOptions.jvmTarget.set(JvmTarget.JVM_25)
     }
+    test {
+        useJUnitPlatform()
+    }
     processResources {
         filteringCharset = "UTF-8"
     }

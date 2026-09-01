@@ -172,6 +172,124 @@ internal class SimulatedEntityStore(
         size = 0
     }
 
+    fun copyFrameStateTo(
+        entityIds: IntArray,
+        positionX: DoubleArray,
+        positionY: DoubleArray,
+        positionZ: DoubleArray,
+        velocityX: DoubleArray,
+        velocityY: DoubleArray,
+        velocityZ: DoubleArray,
+        yaw: FloatArray,
+        pitch: FloatArray,
+        health: DoubleArray,
+        maximumHealth: DoubleArray,
+        hitboxWidth: DoubleArray,
+        hitboxHeight: DoubleArray,
+        teams: IntArray,
+        presentationIds: IntArray,
+        flags: LongArray
+    ) {
+        require(
+            entityIds.size == size &&
+                    positionX.size == size &&
+                    positionY.size == size &&
+                    positionZ.size == size &&
+                    velocityX.size == size &&
+                    velocityY.size == size &&
+                    velocityZ.size == size &&
+                    yaw.size == size &&
+                    pitch.size == size &&
+                    health.size == size &&
+                    maximumHealth.size == size &&
+                    hitboxWidth.size == size &&
+                    hitboxHeight.size == size &&
+                    teams.size == size &&
+                    presentationIds.size == size &&
+                    flags.size == size
+        )
+
+        this.entityIds.copyInto(
+            entityIds,
+            endIndex = size
+        )
+
+        this.positionX.copyInto(
+            positionX,
+            endIndex = size
+        )
+
+        this.positionY.copyInto(
+            positionY,
+            endIndex = size
+        )
+
+        this.positionZ.copyInto(
+            positionZ,
+            endIndex = size
+        )
+
+        this.velocityX.copyInto(
+            velocityX,
+            endIndex = size
+        )
+
+        this.velocityY.copyInto(
+            velocityY,
+            endIndex = size
+        )
+
+        this.velocityZ.copyInto(
+            velocityZ,
+            endIndex = size
+        )
+
+        this.yaw.copyInto(
+            yaw,
+            endIndex = size
+        )
+
+        this.pitch.copyInto(
+            pitch,
+            endIndex = size
+        )
+
+        this.health.copyInto(
+            health,
+            endIndex = size
+        )
+
+        this.maximumHealth.copyInto(
+            maximumHealth,
+            endIndex = size
+        )
+
+        this.hitboxWidth.copyInto(
+            hitboxWidth,
+            endIndex = size
+        )
+
+        this.hitboxHeight.copyInto(
+            hitboxHeight,
+            endIndex = size
+        )
+
+        this.teams.copyInto(
+            teams,
+            endIndex = size
+        )
+
+        this.presentationIds.copyInto(
+            presentationIds,
+            endIndex = size
+        )
+
+        this.flags.copyInto(
+            flags,
+            endIndex = size
+        )
+    }
+
     operator fun contains(entityId: SimulatedEntityId): Boolean =
         entityIdToSlot.containsKey(entityId.value)
 

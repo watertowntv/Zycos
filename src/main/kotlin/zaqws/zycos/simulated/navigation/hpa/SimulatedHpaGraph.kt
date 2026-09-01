@@ -9,7 +9,6 @@ import zaqws.zycos.simulated.paper.map.SimulatedMapRevision
 import zaqws.zycos.simulated.navigation.NavigationNode
 import zaqws.zycos.simulated.navigation.SimulatedTraversalProfile
 import java.util.concurrent.atomic.AtomicInteger
-import kotlin.math.abs
 
 class SimulatedHpaGraph private constructor(
     val mapRevision: SimulatedMapRevision,
@@ -96,6 +95,9 @@ class SimulatedHpaGraph private constructor(
             traversalProfile:
             SimulatedTraversalProfile
         ): SimulatedHpaGraph {
+            val expectedMapRevision =
+                map.revision
+
             val clusterPortals =
                 Long2ObjectOpenHashMap<
                         MutableList<
@@ -241,9 +243,19 @@ class SimulatedHpaGraph private constructor(
                 chunkZ++
             }
 
+            if (
+                map.revision !=
+                expectedMapRevision
+            ) {
+                return build(
+                    map,
+                    traversalProfile
+                )
+            }
+
             return SimulatedHpaGraph(
                 mapRevision =
-                    map.revision,
+                    expectedMapRevision,
 
                 traversalProfile =
                     traversalProfile,
@@ -330,6 +342,9 @@ class SimulatedHpaGraph private constructor(
                             1
                 )
 
+            val candidates =
+                ArrayList<PortalCandidate>()
+
             var worldZ =
                 minimumWorldZ
 
@@ -337,7 +352,7 @@ class SimulatedHpaGraph private constructor(
                 worldZ <=
                 maximumWorldZ
             ) {
-                createPortalsBetweenColumns(
+                collectPortalCandidatesBetweenColumns(
                     map = map,
                     traversalProfile =
                         traversalProfile,
@@ -349,24 +364,23 @@ class SimulatedHpaGraph private constructor(
                         secondWorldX,
                     secondZ =
                         worldZ,
-                    firstChunkX =
-                        firstChunkX,
-                    firstChunkZ =
-                        firstChunkZ,
-                    secondChunkX =
-                        secondChunkX,
-                    secondChunkZ =
-                        secondChunkZ,
-                    nextPortalId =
-                        nextPortalId,
-                    clusterPortals =
-                        clusterPortals,
-                    portals =
-                        portals
+                    destination =
+                        candidates
                 )
 
                 worldZ++
             }
+
+            addCompressedPortals(
+                candidates = candidates,
+                firstChunkX = firstChunkX,
+                firstChunkZ = firstChunkZ,
+                secondChunkX = secondChunkX,
+                secondChunkZ = secondChunkZ,
+                nextPortalId = nextPortalId,
+                clusterPortals = clusterPortals,
+                portals = portals
+            )
         }
 
         private fun createVerticalBoundaryPortals(
@@ -433,6 +447,9 @@ class SimulatedHpaGraph private constructor(
                             1
                 )
 
+            val candidates =
+                ArrayList<PortalCandidate>()
+
             var worldX =
                 minimumWorldX
 
@@ -440,7 +457,7 @@ class SimulatedHpaGraph private constructor(
                 worldX <=
                 maximumWorldX
             ) {
-                createPortalsBetweenColumns(
+                collectPortalCandidatesBetweenColumns(
                     map = map,
                     traversalProfile =
                         traversalProfile,
@@ -452,27 +469,26 @@ class SimulatedHpaGraph private constructor(
                         worldX,
                     secondZ =
                         secondWorldZ,
-                    firstChunkX =
-                        firstChunkX,
-                    firstChunkZ =
-                        firstChunkZ,
-                    secondChunkX =
-                        secondChunkX,
-                    secondChunkZ =
-                        secondChunkZ,
-                    nextPortalId =
-                        nextPortalId,
-                    clusterPortals =
-                        clusterPortals,
-                    portals =
-                        portals
+                    destination =
+                        candidates
                 )
 
                 worldX++
             }
+
+            addCompressedPortals(
+                candidates = candidates,
+                firstChunkX = firstChunkX,
+                firstChunkZ = firstChunkZ,
+                secondChunkX = secondChunkX,
+                secondChunkZ = secondChunkZ,
+                nextPortalId = nextPortalId,
+                clusterPortals = clusterPortals,
+                portals = portals
+            )
         }
 
-        private fun createPortalsBetweenColumns(
+        private fun collectPortalCandidatesBetweenColumns(
             map: SimulatedMap,
             traversalProfile:
             SimulatedTraversalProfile,
@@ -480,21 +496,8 @@ class SimulatedHpaGraph private constructor(
             firstZ: Int,
             secondX: Int,
             secondZ: Int,
-            firstChunkX: Int,
-            firstChunkZ: Int,
-            secondChunkX: Int,
-            secondChunkZ: Int,
-            nextPortalId: AtomicInteger,
-            clusterPortals:
-            Long2ObjectOpenHashMap<
-                    MutableList<
-                            SimulatedHpaPortal
-                            >
-                    >,
-            portals:
-            Int2ObjectOpenHashMap<
-                    SimulatedHpaPortal
-                    >
+            destination:
+                MutableCollection<PortalCandidate>
         ) {
             val firstSurfaceCount =
                 map.surfaceCountAt(
@@ -565,19 +568,6 @@ class SimulatedHpaGraph private constructor(
                         continue
                     }
 
-                    val heightDifference =
-                        abs(
-                            firstSurface.floorHeightUnits -
-                                    secondSurface.floorHeightUnits
-                        )
-
-                    if (
-                        heightDifference >
-                        traversalProfile.maximumStepHeightUnits
-                    ) {
-                        continue
-                    }
-
                     val firstNode =
                         NavigationNode(
                             x =
@@ -617,29 +607,140 @@ class SimulatedHpaGraph private constructor(
                         continue
                     }
 
-                    addPortal(
-                        firstChunkX =
-                            firstChunkX,
-                        firstChunkZ =
-                            firstChunkZ,
-                        secondChunkX =
-                            secondChunkX,
-                        secondChunkZ =
-                            secondChunkZ,
+                    destination.add(
+                        PortalCandidate(
                         firstNode =
                             firstNode,
                         secondNode =
-                            secondNode,
-                        nextPortalId =
-                            nextPortalId,
-                        clusterPortals =
-                            clusterPortals,
-                        portals =
-                            portals
+                            secondNode
+                        )
                     )
                 }
             }
         }
+
+        private fun addCompressedPortals(
+            candidates: List<PortalCandidate>,
+            firstChunkX: Int,
+            firstChunkZ: Int,
+            secondChunkX: Int,
+            secondChunkZ: Int,
+            nextPortalId: AtomicInteger,
+            clusterPortals:
+            Long2ObjectOpenHashMap<
+                    MutableList<
+                            SimulatedHpaPortal
+                            >
+                    >,
+            portals:
+            Int2ObjectOpenHashMap<
+                    SimulatedHpaPortal
+                    >
+        ) {
+            val candidatesByHeight =
+                LinkedHashMap<
+                        Long,
+                        MutableList<PortalCandidate>
+                        >()
+
+            for (candidate in candidates) {
+                val heightKey =
+                    (
+                            candidate.firstNode
+                                .floorHeightUnits
+                                .toLong() shl
+                                    Int.SIZE_BITS
+                            ) or
+                            (
+                                    candidate.secondNode
+                                        .floorHeightUnits
+                                        .toLong() and
+                                            0xFFFF_FFFFL
+                                    )
+
+                candidatesByHeight
+                    .computeIfAbsent(
+                        heightKey
+                    ) {
+                        ArrayList()
+                    }
+                    .add(candidate)
+            }
+
+            for (
+            heightCandidates in
+            candidatesByHeight.values
+            ) {
+                var segmentStart = 0
+                var index = 1
+
+                while (
+                    index <=
+                    heightCandidates.size
+                ) {
+                    val continuesSegment =
+                        index <
+                        heightCandidates.size &&
+                                areAdjacent(
+                                    heightCandidates[
+                                        index - 1
+                                    ],
+                                    heightCandidates[index]
+                                )
+
+                    if (continuesSegment) {
+                        index++
+                        continue
+                    }
+
+                    val representative =
+                        heightCandidates[
+                            (
+                                    segmentStart +
+                                            index - 1
+                                    ) ushr 1
+                        ]
+
+                    addPortal(
+                        firstChunkX = firstChunkX,
+                        firstChunkZ = firstChunkZ,
+                        secondChunkX = secondChunkX,
+                        secondChunkZ = secondChunkZ,
+                        firstNode =
+                            representative.firstNode,
+                        secondNode =
+                            representative.secondNode,
+                        nextPortalId = nextPortalId,
+                        clusterPortals = clusterPortals,
+                        portals = portals
+                    )
+
+                    segmentStart = index
+                    index++
+                }
+            }
+        }
+
+        private fun areAdjacent(
+            first: PortalCandidate,
+            second: PortalCandidate
+        ): Boolean =
+            kotlin.math.abs(
+                first.firstNode.x -
+                        second.firstNode.x
+            ) +
+                    kotlin.math.abs(
+                        first.firstNode.z -
+                                second.firstNode.z
+                    ) == 1 &&
+                    kotlin.math.abs(
+                        first.secondNode.x -
+                                second.secondNode.x
+                    ) +
+                    kotlin.math.abs(
+                        first.secondNode.z -
+                                second.secondNode.z
+                    ) == 1
 
         private fun addPortal(
             firstChunkX: Int,
@@ -743,6 +844,11 @@ class SimulatedHpaGraph private constructor(
                             traversalProfile.height
                     )
             )
+
+        private data class PortalCandidate(
+            val firstNode: NavigationNode,
+            val secondNode: NavigationNode
+        )
 
         private const val CHUNK_SIZE =
             16

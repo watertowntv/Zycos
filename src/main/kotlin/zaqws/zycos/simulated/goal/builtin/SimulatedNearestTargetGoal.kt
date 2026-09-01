@@ -50,7 +50,7 @@ class SimulatedNearestTargetGoal(
         }
 
         val nearestTarget =
-            context.nearestEntity(
+            context.nearestTarget(
                 searchRadius
             ) { candidate ->
                 isValidTarget(
@@ -61,8 +61,8 @@ class SimulatedNearestTargetGoal(
 
         intents.add(
             SimulatedIntent.SetTarget(
-                targetEntityId =
-                    nearestTarget?.entityId,
+                target =
+                    nearestTarget?.target,
 
                 priority =
                     priority
@@ -72,9 +72,12 @@ class SimulatedNearestTargetGoal(
 
     private fun isValidTarget(
         context: SimulatedGoalContext,
-        target: SimulatedGoalContext.EntityView
+        target: SimulatedGoalContext.TargetView
     ): Boolean {
-        if (!target.isAlive) {
+        if (
+            !target.isAlive ||
+            !target.isTargetable
+        ) {
             return false
         }
 

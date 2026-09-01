@@ -3,44 +3,55 @@
 package zaqws.zycos.simulated.map
 
 enum class CollisionKind(
-    val collisionHeightUnits: Int,
+    val minimumHeightUnits: Int,
+    val maximumHeightUnits: Int,
     val blocksMovement: Boolean,
     val supportsStanding: Boolean
 ) {
     AIR(
-        collisionHeightUnits = 0,
+        minimumHeightUnits = 0,
+        maximumHeightUnits = 0,
         blocksMovement = false,
         supportsStanding = false
     ),
 
     FULL(
-        collisionHeightUnits = SimulatedMapConfig.UNITS_PER_BLOCK,
+        minimumHeightUnits = 0,
+        maximumHeightUnits = SimulatedMapConfig.UNITS_PER_BLOCK,
         blocksMovement = true,
         supportsStanding = true
     ),
 
-    HALF(
-        collisionHeightUnits = SimulatedMapConfig.UNITS_PER_BLOCK / 2,
+    BOTTOM_SLAB(
+        minimumHeightUnits = 0,
+        maximumHeightUnits = SimulatedMapConfig.UNITS_PER_BLOCK / 2,
+        blocksMovement = true,
+        supportsStanding = true
+    ),
+
+    TOP_SLAB(
+        minimumHeightUnits = SimulatedMapConfig.UNITS_PER_BLOCK / 2,
+        maximumHeightUnits = SimulatedMapConfig.UNITS_PER_BLOCK,
         blocksMovement = true,
         supportsStanding = true
     ),
 
     TALL(
-        collisionHeightUnits = SimulatedMapConfig.UNITS_PER_BLOCK +
+        minimumHeightUnits = 0,
+        maximumHeightUnits = SimulatedMapConfig.UNITS_PER_BLOCK +
                 SimulatedMapConfig.UNITS_PER_BLOCK / 2,
         blocksMovement = true,
         supportsStanding = true
-    ),
-
-    DEEP_WATER(
-        collisionHeightUnits = SimulatedMapConfig.UNITS_PER_BLOCK,
-        blocksMovement = true,
-        supportsStanding = false
     );
 
-    val collisionHeight: Double
+    val minimumHeight: Double
         get() =
-            collisionHeightUnits.toDouble() /
+            minimumHeightUnits.toDouble() /
+                    SimulatedMapConfig.UNITS_PER_BLOCK
+
+    val maximumHeight: Double
+        get() =
+            maximumHeightUnits.toDouble() /
                     SimulatedMapConfig.UNITS_PER_BLOCK
 
     val isAir: Boolean

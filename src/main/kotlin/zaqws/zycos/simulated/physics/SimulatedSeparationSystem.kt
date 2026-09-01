@@ -32,10 +32,6 @@ internal class SimulatedSeparationSystem(
             return
         }
 
-        spatialIndex.rebuild(
-            entityStore
-        )
-
         var slot = 0
 
         while (slot < entityStore.size) {

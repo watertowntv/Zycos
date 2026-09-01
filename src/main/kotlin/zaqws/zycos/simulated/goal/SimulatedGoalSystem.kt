@@ -2,11 +2,12 @@
 
 package zaqws.zycos.simulated.goal
 
-import it.unimi.dsi.fastutil.ints.Int2IntOpenHashMap
 import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap
+import zaqws.zycos.simulated.SimulatedTarget
 import zaqws.zycos.simulated.entity.SimulatedEntityFlag
 import zaqws.zycos.simulated.entity.SimulatedEntityId
 import zaqws.zycos.simulated.entity.SimulatedEntityStore
+import zaqws.zycos.simulated.external.SimulatedExternalFrame
 import zaqws.zycos.simulated.spatial.SimulatedEntityQuery
 import zaqws.zycos.simulated.system.SimulatedSystem
 import zaqws.zycos.simulated.system.SimulatedSystemContext
@@ -15,7 +16,9 @@ internal class SimulatedGoalSystem(
     private val entityStore: SimulatedEntityStore,
     private val entityQuery: SimulatedEntityQuery,
     private val goalSetProvider:
-        (SimulatedEntityId) -> SimulatedGoalSet?
+        (SimulatedEntityId) -> SimulatedGoalSet?,
+    private val externalFrameProvider:
+        () -> SimulatedExternalFrame
 ) : SimulatedSystem {
     @ConsistentCopyVisibility
     data class ResolvedIntents internal constructor(
@@ -24,28 +27,11 @@ internal class SimulatedGoalSystem(
         val attack: SimulatedIntent.Attack?
     )
 
-    private data class EntityGoalState(
+    private class EntityGoalState(
         val goalSet: SimulatedGoalSet,
-        val runtimes: Array<SimulatedGoalRuntime>
-    ) {
-        override fun equals(other: Any?): Boolean {
-            if (this === other) return true
-            if (javaClass != other?.javaClass) return false
-
-            other as EntityGoalState
-
-            if (goalSet != other.goalSet) return false
-            if (!runtimes.contentEquals(other.runtimes)) return false
-
-            return true
-        }
-
-        override fun hashCode(): Int {
-            var result = goalSet.hashCode()
-            result = 31 * result + runtimes.contentHashCode()
-            return result
-        }
-    }
+        val runtimes: Array<SimulatedGoalRuntime>,
+        val intents: Array<List<SimulatedIntent>>
+    )
 
     private val goalStates =
         Int2ObjectOpenHashMap<EntityGoalState>()
@@ -53,10 +39,8 @@ internal class SimulatedGoalSystem(
     private val resolvedIntents =
         Int2ObjectOpenHashMap<ResolvedIntents>()
 
-    private val targetEntityIds =
-        Int2IntOpenHashMap().apply {
-            defaultReturnValue(NO_TARGET)
-        }
+    private val targets =
+        Int2ObjectOpenHashMap<SimulatedTarget>()
 
     private val evaluationBuffer =
         ArrayList<SimulatedIntent>(8)
@@ -64,8 +48,6 @@ internal class SimulatedGoalSystem(
     override fun update(
         context: SimulatedSystemContext
     ) {
-        resolvedIntents.clear()
-
         var slot = 0
 
         while (slot < entityStore.size) {
@@ -112,28 +94,15 @@ internal class SimulatedGoalSystem(
 
     fun target(
         entityId: SimulatedEntityId
-    ): SimulatedEntityId? {
-        val targetEntityId =
-            targetEntityIds.get(
-                entityId.value
-            )
-
-        return if (
-            targetEntityId ==
-            NO_TARGET
-        ) {
-            null
-        } else {
-            SimulatedEntityId(
-                targetEntityId
-            )
-        }
-    }
+    ): SimulatedTarget? =
+        targets[
+            entityId.value
+        ]
 
     fun clearTarget(
         entityId: SimulatedEntityId
     ) {
-        targetEntityIds.remove(
+        targets.remove(
             entityId.value
         )
     }
@@ -149,7 +118,7 @@ internal class SimulatedGoalSystem(
             entityId.value
         )
 
-        targetEntityIds.remove(
+        targets.remove(
             entityId.value
         )
     }
@@ -157,7 +126,7 @@ internal class SimulatedGoalSystem(
     fun clear() {
         goalStates.clear()
         resolvedIntents.clear()
-        targetEntityIds.clear()
+        targets.clear()
         evaluationBuffer.clear()
     }
 
@@ -173,9 +142,21 @@ internal class SimulatedGoalSystem(
         val goalSet =
             goalSetProvider(
                 entityId
-            ) ?: return
+            )
+
+        if (goalSet == null) {
+            resolvedIntents.remove(
+                entityId.value
+            )
+
+            return
+        }
 
         if (goalSet.isEmpty) {
+            resolvedIntents.remove(
+                entityId.value
+            )
+
             return
         }
 
@@ -185,7 +166,7 @@ internal class SimulatedGoalSystem(
                 goalSet
             )
 
-        val currentTargetEntityId =
+        val currentTarget =
             validatedTarget(
                 entityId
             )
@@ -198,17 +179,18 @@ internal class SimulatedGoalSystem(
                 entityQuery =
                     entityQuery,
 
+                externalFrame =
+                    externalFrameProvider(),
+
                 entityId =
                     entityId,
 
                 tick =
                     tick,
 
-                currentTargetEntityId =
-                    currentTargetEntityId
+                currentTarget =
+                    currentTarget
             )
-
-        evaluationBuffer.clear()
 
         var goalIndex = 0
 
@@ -231,6 +213,8 @@ internal class SimulatedGoalSystem(
                         tick
                 )
             ) {
+                evaluationBuffer.clear()
+
                 entry.goal.evaluate(
                     context =
                         goalContext,
@@ -243,10 +227,25 @@ internal class SimulatedGoalSystem(
                     intents =
                         evaluationBuffer
                 )
+
+                state.intents[goalIndex] =
+                    evaluationBuffer.toList()
             }
 
             goalIndex++
         }
+
+        evaluationBuffer.clear()
+
+        for (intents in state.intents) {
+            evaluationBuffer.addAll(
+                intents
+            )
+        }
+
+        resolvedIntents.remove(
+            entityId.value
+        )
 
         resolveIntents(
             entityId,
@@ -321,18 +320,18 @@ internal class SimulatedGoalSystem(
         }
 
         if (targetIntent != null) {
-            val targetEntityId =
+            val target =
                 targetIntent
-                    .targetEntityId
+                    .target
 
-            if (targetEntityId == null) {
-                targetEntityIds.remove(
+            if (target == null) {
+                targets.remove(
                     entityId.value
                 )
             } else {
-                targetEntityIds.put(
+                targets.put(
                     entityId.value,
-                    targetEntityId.value
+                    target
                 )
             }
         }
@@ -390,7 +389,12 @@ internal class SimulatedGoalSystem(
                     goalSet,
 
                 runtimes =
-                    runtimes
+                    runtimes,
+
+                intents =
+                    Array(goalSet.size) {
+                        emptyList()
+                    }
             )
 
         goalStates.put(
@@ -403,48 +407,46 @@ internal class SimulatedGoalSystem(
 
     private fun validatedTarget(
         sourceEntityId: SimulatedEntityId
-    ): SimulatedEntityId? {
-        val targetEntityIdValue =
-            targetEntityIds.get(
+    ): SimulatedTarget? {
+        val target =
+            targets[
+                sourceEntityId.value
+            ] ?: return null
+
+        val valid =
+            when (target) {
+                is SimulatedTarget.Entity -> {
+                    val targetSlot =
+                        entityStore.slotOf(
+                            target.entityId
+                        )
+
+                    targetSlot >= 0 &&
+                            !entityStore.hasFlag(
+                                targetSlot,
+                                SimulatedEntityFlag.REMOVED
+                            ) &&
+                            !entityStore.hasFlag(
+                                targetSlot,
+                                SimulatedEntityFlag.DEAD
+                            )
+                }
+
+                is SimulatedTarget.ExternalActor ->
+                    externalFrameProvider()[
+                        target.actorId
+                    ]?.isTargetable == true
+            }
+
+        if (!valid) {
+            targets.remove(
                 sourceEntityId.value
             )
 
-        if (
-            targetEntityIdValue ==
-            NO_TARGET
-        ) {
             return null
         }
 
-        val targetEntityId =
-            SimulatedEntityId(
-                targetEntityIdValue
-            )
-
-        val targetSlot =
-            entityStore.slotOf(
-                targetEntityId
-            )
-
-        if (
-            targetSlot < 0 ||
-            entityStore.hasFlag(
-                targetSlot,
-                SimulatedEntityFlag.REMOVED
-            ) ||
-            entityStore.hasFlag(
-                targetSlot,
-                SimulatedEntityFlag.DEAD
-            )
-        ) {
-            targetEntityIds.remove(
-                sourceEntityId.value
-            )
-
-            return null
-        }
-
-        return targetEntityId
+        return target
     }
 
     private fun shouldEvaluate(
@@ -501,8 +503,8 @@ internal class SimulatedGoalSystem(
         }
 
         val targetIterator =
-            targetEntityIds
-                .int2IntEntrySet()
+            targets
+                .int2ObjectEntrySet()
                 .fastIterator()
 
         while (
@@ -521,9 +523,28 @@ internal class SimulatedGoalSystem(
                 targetIterator.remove()
             }
         }
+
+        val intentIterator =
+            resolvedIntents
+                .int2ObjectEntrySet()
+                .fastIterator()
+
+        while (
+            intentIterator.hasNext()
+        ) {
+            val entry =
+                intentIterator.next()
+
+            if (
+                entityStore.slotOf(
+                    SimulatedEntityId(
+                        entry.intKey
+                    )
+                ) < 0
+            ) {
+                intentIterator.remove()
+            }
+        }
     }
 
-    companion object {
-        private const val NO_TARGET = 0
-    }
 }

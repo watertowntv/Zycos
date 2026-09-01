@@ -4,6 +4,7 @@ package zaqws.zycos.simulated.spatial
 
 import zaqws.zycos.simulated.entity.SimulatedEntityFlag
 import zaqws.zycos.simulated.entity.SimulatedEntityStore
+import zaqws.zycos.simulated.external.SimulatedExternalFrame
 import zaqws.zycos.simulated.math.SimulatedVector3
 
 internal class SimulatedInterestIndex(
@@ -64,6 +65,36 @@ internal class SimulatedInterestIndex(
 
         playerCount =
             playerPositions.size
+    }
+
+    fun rebuild(
+        externalFrame: SimulatedExternalFrame
+    ) {
+        ensureCapacity(
+            externalFrame.size
+        )
+
+        var index = 0
+
+        while (index < externalFrame.size) {
+            val position =
+                externalFrame[index]
+                    .position
+
+            playerPositionX[index] =
+                position.x
+
+            playerPositionY[index] =
+                position.y
+
+            playerPositionZ[index] =
+                position.z
+
+            index++
+        }
+
+        playerCount =
+            externalFrame.size
     }
 
     fun clear() {

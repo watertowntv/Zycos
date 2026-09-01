@@ -5,6 +5,9 @@ data class SimulatedConfig(
     val maximumCatchUpTicks: Int = DEFAULT_MAXIMUM_CATCH_UP_TICKS,
     val initialEntityCapacity: Int = DEFAULT_INITIAL_ENTITY_CAPACITY,
     val maximumCommandsPerTick: Int = DEFAULT_MAXIMUM_COMMANDS_PER_TICK,
+    val maximumQueuedEvents: Int = DEFAULT_MAXIMUM_QUEUED_EVENTS,
+    val maximumQueuedExternalActions: Int =
+        DEFAULT_MAXIMUM_QUEUED_EXTERNAL_ACTIONS,
     val goalIntervalTicks: Int = DEFAULT_GOAL_INTERVAL_TICKS,
     val targetSearchIntervalTicks: Int = DEFAULT_TARGET_SEARCH_INTERVAL_TICKS,
     val remoteSimulationIntervalTicks: Int = DEFAULT_REMOTE_SIMULATION_INTERVAL_TICKS,
@@ -28,6 +31,8 @@ data class SimulatedConfig(
 
         const val DEFAULT_INITIAL_ENTITY_CAPACITY = 512
         const val DEFAULT_MAXIMUM_COMMANDS_PER_TICK = 100_000
+        const val DEFAULT_MAXIMUM_QUEUED_EVENTS = 16_384
+        const val DEFAULT_MAXIMUM_QUEUED_EXTERNAL_ACTIONS = 8_192
 
         const val DEFAULT_GOAL_INTERVAL_TICKS = 4
         const val DEFAULT_TARGET_SEARCH_INTERVAL_TICKS = 5
@@ -58,6 +63,8 @@ data class SimulatedConfig(
         require(maximumCatchUpTicks >= 0)
         require(initialEntityCapacity > 0)
         require(maximumCommandsPerTick > 0)
+        require(maximumQueuedEvents > 0)
+        require(maximumQueuedExternalActions > 0)
 
         require(goalIntervalTicks > 0)
         require(targetSearchIntervalTicks > 0)

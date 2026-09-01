@@ -69,8 +69,8 @@ class SimulatedMeleeGoal(
 
             intents.add(
                 SimulatedIntent.Attack(
-                    targetEntityId =
-                        target.entityId,
+                    target =
+                        target.target,
 
                     priority =
                         attackPriority

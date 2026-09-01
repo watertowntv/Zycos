@@ -2,9 +2,12 @@
 
 package zaqws.zycos.simulated
 
+import zaqws.zycos.simulated.map.SimulatedMap
 import zaqws.zycos.simulated.system.SimulatedSystem
 
-class SimulatedEngineBuilder {
+class SimulatedEngineBuilder(
+    private val map: SimulatedMap
+) {
     private var config = SimulatedConfig()
     private val systems = ArrayList<SimulatedSystem>()
 
@@ -29,7 +32,11 @@ class SimulatedEngineBuilder {
     fun build(
         start: Boolean = false
     ): SimulatedEngine {
-        val engine = SimulatedEngine(config)
+        val engine =
+            SimulatedEngine(
+                map,
+                config
+            )
 
         for (system in systems) {
             engine.registerSystem(system)

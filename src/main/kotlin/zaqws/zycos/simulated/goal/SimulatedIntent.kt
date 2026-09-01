@@ -1,6 +1,6 @@
 package zaqws.zycos.simulated.goal
 
-import zaqws.zycos.simulated.entity.SimulatedEntityId
+import zaqws.zycos.simulated.SimulatedTarget
 import zaqws.zycos.simulated.math.SimulatedVector3
 
 sealed interface SimulatedIntent {
@@ -40,12 +40,12 @@ sealed interface SimulatedIntent {
     }
 
     data class Attack(
-        val targetEntityId: SimulatedEntityId,
+        val target: SimulatedTarget,
         override val priority: Int = DEFAULT_PRIORITY
     ) : SimulatedIntent
 
     data class SetTarget(
-        val targetEntityId: SimulatedEntityId?,
+        val target: SimulatedTarget?,
         override val priority: Int = DEFAULT_PRIORITY
     ) : SimulatedIntent
 

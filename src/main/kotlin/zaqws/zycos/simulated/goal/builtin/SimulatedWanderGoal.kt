@@ -54,7 +54,7 @@ class SimulatedWanderGoal(
         require(runtime is Runtime)
 
         if (
-            context.currentTargetEntityId != null
+            context.currentTarget != null
         ) {
             runtime.targetPosition = null
 

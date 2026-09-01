@@ -3,7 +3,10 @@
 package zaqws.zycos.simulated.paper.render
 
 import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap
+import it.unimi.dsi.fastutil.ints.Int2IntOpenHashMap
+import it.unimi.dsi.fastutil.ints.IntArrayList
 import it.unimi.dsi.fastutil.ints.IntOpenHashSet
+import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap
 import org.bukkit.Location
 import org.bukkit.World
 import org.bukkit.entity.Player
@@ -13,8 +16,10 @@ import zaqws.zycos.ClientEntityManager
 import zaqws.zycos.simulated.SimulatedEngine
 import zaqws.zycos.simulated.entity.SimulatedEntityId
 import zaqws.zycos.simulated.entity.SimulatedPresentationId
+import zaqws.zycos.simulated.math.SimulatedMath
 import zaqws.zycos.simulated.snapshot.SimulatedFrame
 import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.math.ceil
 
 class PaperSimulatedRenderer(
     private val plugin: JavaPlugin,
@@ -33,6 +38,17 @@ class PaperSimulatedRenderer(
         Int2ObjectOpenHashMap<RenderedEntity>()
 
     private val currentEntityIds =
+        IntOpenHashSet()
+
+    private val frameIndexByEntityId =
+        Int2IntOpenHashMap().apply {
+            defaultReturnValue(-1)
+        }
+
+    private val frameCells =
+        Long2ObjectOpenHashMap<IntArrayList>()
+
+    private val candidateIndices =
         IntOpenHashSet()
 
     private val activePlayers =
@@ -123,25 +139,39 @@ class PaperSimulatedRenderer(
 
         collectActivePlayers()
 
-        currentEntityIds.clear()
+        rebuildFrameIndex(frame)
+        collectCandidateIndices()
 
-        var index = 0
+        val renderedIterator =
+            renderedEntities
+                .keys
+                .iterator()
 
-        while (index < frame.size) {
-            val entityId =
-                frame.entityIds[index]
+        while (renderedIterator.hasNext()) {
+            val frameIndex =
+                frameIndexByEntityId.get(
+                    renderedIterator.nextInt()
+                )
 
-            currentEntityIds.add(
-                entityId
-            )
+            if (frameIndex >= 0) {
+                candidateIndices.add(
+                    frameIndex
+                )
+            }
+        }
+
+        val candidateIterator =
+            candidateIndices.iterator()
+
+        while (candidateIterator.hasNext()) {
+            val index =
+                candidateIterator.nextInt()
 
             updateEntity(
                 frame,
                 index,
-                entityId
+                frame.entityIds[index]
             )
-
-            index++
         }
 
         processVisualEvents()
@@ -188,6 +218,9 @@ class PaperSimulatedRenderer(
         renderedEntities.clear()
         currentEntityIds.clear()
         activePlayers.clear()
+        frameIndexByEntityId.clear()
+        frameCells.clear()
+        candidateIndices.clear()
     }
 
     private fun updateEntity(
@@ -499,8 +532,128 @@ class PaperSimulatedRenderer(
         }
     }
 
+    private fun rebuildFrameIndex(
+        frame: SimulatedFrame
+    ) {
+        currentEntityIds.clear()
+        frameIndexByEntityId.clear()
+        frameCells.clear()
+
+        var index = 0
+
+        while (index < frame.size) {
+            val entityId =
+                frame.entityIds[index]
+
+            currentEntityIds.add(entityId)
+
+            frameIndexByEntityId.put(
+                entityId,
+                index
+            )
+
+            val cellX =
+                SimulatedMath.floorToInt(
+                    frame.positionX[index] /
+                            FRAME_CELL_SIZE
+                )
+
+            val cellZ =
+                SimulatedMath.floorToInt(
+                    frame.positionZ[index] /
+                            FRAME_CELL_SIZE
+                )
+
+            frameCells
+                .computeIfAbsent(
+                    packCell(
+                        cellX,
+                        cellZ
+                    )
+                ) {
+                    IntArrayList()
+                }
+                .add(index)
+
+            index++
+        }
+    }
+
+    private fun collectCandidateIndices() {
+        candidateIndices.clear()
+
+        val radiusInCells =
+            ceil(
+                hideRadius /
+                        FRAME_CELL_SIZE
+            ).toInt()
+
+        for (player in activePlayers) {
+            val location =
+                player.location
+
+            val centerCellX =
+                SimulatedMath.floorToInt(
+                    location.x /
+                            FRAME_CELL_SIZE
+                )
+
+            val centerCellZ =
+                SimulatedMath.floorToInt(
+                    location.z /
+                            FRAME_CELL_SIZE
+                )
+
+            var cellZ =
+                centerCellZ -
+                        radiusInCells
+
+            while (
+                cellZ <=
+                centerCellZ + radiusInCells
+            ) {
+                var cellX =
+                    centerCellX -
+                            radiusInCells
+
+                while (
+                    cellX <=
+                    centerCellX + radiusInCells
+                ) {
+                    val indices =
+                        frameCells[
+                            packCell(
+                                cellX,
+                                cellZ
+                            )
+                        ]
+
+                    if (indices != null) {
+                        candidateIndices.addAll(
+                            indices
+                        )
+                    }
+
+                    cellX++
+                }
+
+                cellZ++
+            }
+        }
+    }
+
+    private fun packCell(
+        cellX: Int,
+        cellZ: Int
+    ): Long =
+        (cellX.toLong() shl Int.SIZE_BITS) or
+                (
+                        cellZ.toLong() and
+                                0xFFFF_FFFFL
+                        )
+
     private fun processVisualEvents() {
-        engine.drainEvents(
+        engine.drainVisualEvents(
             maximumEvents =
                 MAXIMUM_VISUAL_EVENTS_PER_TICK
         ).forEach(
@@ -571,5 +724,8 @@ class PaperSimulatedRenderer(
         private const val
                 MAXIMUM_VISUAL_EVENTS_PER_TICK =
             100_000
+
+        private const val FRAME_CELL_SIZE =
+            32.0
     }
 }

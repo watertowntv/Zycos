@@ -198,10 +198,10 @@ class BakedChunk internal constructor(
             ]
 
             val collisionMinimumY =
-                spanStartY[index].toDouble()
+                spanStartY[index] + kind.minimumHeight
 
             val collisionMaximumY =
-                spanEndY[index] + kind.collisionHeight
+                spanEndY[index] + kind.maximumHeight
 
             if (
                 collisionMaximumY > minimumY &&
@@ -257,10 +257,10 @@ class BakedChunk internal constructor(
             ]
 
             val collisionMinimumY =
-                spanStartY[index].toDouble()
+                spanStartY[index] + kind.minimumHeight
 
             val collisionMaximumY =
-                spanEndY[index] + kind.collisionHeight
+                spanEndY[index] + kind.maximumHeight
 
             if (collisionMinimumY >= maximumY) {
                 return

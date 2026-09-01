@@ -36,6 +36,32 @@ class SimulatedAStarPathfinder(
     override fun findPath(
         map: SimulatedMap,
         request: SimulatedPathRequest
+    ): SimulatedPathResult =
+        findPath(
+            map = map,
+            request = request,
+            allowedChunkX = null,
+            allowedChunkZ = null
+        )
+
+    internal fun findPathInChunk(
+        map: SimulatedMap,
+        request: SimulatedPathRequest,
+        chunkX: Int,
+        chunkZ: Int
+    ): SimulatedPathResult =
+        findPath(
+            map = map,
+            request = request,
+            allowedChunkX = chunkX,
+            allowedChunkZ = chunkZ
+        )
+
+    private fun findPath(
+        map: SimulatedMap,
+        request: SimulatedPathRequest,
+        allowedChunkX: Int?,
+        allowedChunkZ: Int?
     ): SimulatedPathResult {
         if (
             map.revision !=
@@ -45,6 +71,17 @@ class SimulatedAStarPathfinder(
         }
 
         if (
+            allowedChunkX != null &&
+            (
+                    request.start.chunkX !=
+                            allowedChunkX ||
+                            request.start.chunkZ !=
+                            allowedChunkZ ||
+                            request.target.chunkX !=
+                            allowedChunkX ||
+                            request.target.chunkZ !=
+                            allowedChunkZ
+                    ) ||
             !isValidNode(
                 map,
                 request.start,
@@ -201,6 +238,18 @@ class SimulatedAStarPathfinder(
             ) { edge ->
                 val targetNode =
                     edge.target
+
+                if (
+                    allowedChunkX != null &&
+                    (
+                            targetNode.chunkX !=
+                                    allowedChunkX ||
+                                    targetNode.chunkZ !=
+                                    allowedChunkZ
+                            )
+                ) {
+                    return@forEachNeighbor
+                }
 
                 if (
                     targetNode in

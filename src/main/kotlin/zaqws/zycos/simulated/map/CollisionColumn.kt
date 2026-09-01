@@ -38,7 +38,10 @@ class CollisionColumn private constructor(
 
                 while (
                     index < kinds.size &&
-                    kinds[index].ordinal == ordinal
+                    kinds[index].ordinal == ordinal &&
+                    kind.minimumHeightUnits == 0 &&
+                    kind.maximumHeightUnits >=
+                    SimulatedMapConfig.UNITS_PER_BLOCK
                 ) {
                     index++
                 }
@@ -66,7 +69,10 @@ class CollisionColumn private constructor(
 
                 while (
                     index < kinds.size &&
-                    kinds[index] == kind
+                    kinds[index] == kind &&
+                    kind.minimumHeightUnits == 0 &&
+                    kind.maximumHeightUnits >=
+                    SimulatedMapConfig.UNITS_PER_BLOCK
                 ) {
                     index++
                 }
@@ -162,9 +168,10 @@ class CollisionColumn private constructor(
         for (index in startY.indices) {
             val kind = CollisionKind.entries[kinds[index].toInt()]
 
-            val spanMinimumY = startY[index].toDouble()
+            val spanMinimumY =
+                startY[index] + kind.minimumHeight
             val spanMaximumY =
-                endY[index] + kind.collisionHeight
+                endY[index] + kind.maximumHeight
 
             if (
                 spanMaximumY > minimumY &&

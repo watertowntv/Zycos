@@ -4,6 +4,7 @@ package zaqws.zycos.simulated.physics
 
 import it.unimi.dsi.fastutil.ints.Int2DoubleOpenHashMap
 import zaqws.zycos.simulated.entity.SimulatedEntityFlag
+import zaqws.zycos.simulated.entity.SimulatedEntityId
 import zaqws.zycos.simulated.entity.SimulatedEntityStore
 import zaqws.zycos.simulated.map.SimulatedMap
 import zaqws.zycos.simulated.math.SimulatedVector3
@@ -17,7 +18,13 @@ internal class SimulatedPhysicsSystem(
     private val config: SimulatedPhysicsConfig =
         SimulatedPhysicsConfig.DEFAULT,
     private val fallModel: SimulatedFallModel =
-        MinecraftLikeFallModel()
+        MinecraftLikeFallModel(),
+    private val damageConsumer:
+        (
+            entityId: SimulatedEntityId,
+            damage: Double,
+            tick: Long
+        ) -> Unit
 ) : SimulatedSystem {
     private val collisionSolver =
         SimulatedCollisionSolver(
@@ -36,7 +43,10 @@ internal class SimulatedPhysicsSystem(
         var slot = 0
 
         while (slot < entityStore.size) {
-            updateEntity(slot)
+            updateEntity(
+                slot,
+                context.tick
+            )
             slot++
         }
 
@@ -44,7 +54,8 @@ internal class SimulatedPhysicsSystem(
     }
 
     private fun updateEntity(
-        slot: Int
+        slot: Int,
+        tick: Long
     ) {
         if (
             entityStore.hasFlag(
@@ -140,7 +151,8 @@ internal class SimulatedPhysicsSystem(
             wasOnGround = wasOnGround,
             onGround = onGround,
             actualVerticalMovement =
-                actualMovement.y
+                actualMovement.y,
+            tick = tick
         )
 
         if (
@@ -192,7 +204,8 @@ internal class SimulatedPhysicsSystem(
         slot: Int,
         wasOnGround: Boolean,
         onGround: Boolean,
-        actualVerticalMovement: Double
+        actualVerticalMovement: Double,
+        tick: Long
     ) {
         var fallDistance =
             fallDistanceByEntityId.get(
@@ -221,7 +234,8 @@ internal class SimulatedPhysicsSystem(
         ) {
             applyFallDamage(
                 slot,
-                fallDistance
+                fallDistance,
+                tick
             )
         }
 
@@ -241,7 +255,8 @@ internal class SimulatedPhysicsSystem(
 
     private fun applyFallDamage(
         slot: Int,
-        fallDistance: Double
+        fallDistance: Double,
+        tick: Long
     ) {
         val damage =
             fallModel.calculateDamage(
@@ -252,9 +267,10 @@ internal class SimulatedPhysicsSystem(
             return
         }
 
-        entityStore.damage(
-            slot,
-            damage
+        damageConsumer(
+            entityStore.entityIdAt(slot),
+            damage,
+            tick
         )
     }
 

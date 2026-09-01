@@ -7,8 +7,7 @@ import zaqws.zycos.simulated.math.SimulatedBlockPosition
 import zaqws.zycos.simulated.math.SimulatedMath
 import zaqws.zycos.simulated.math.SimulatedVector3
 import zaqws.zycos.simulated.paper.map.SimulatedMapRevision
-import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.atomic.AtomicReference
 
 class SimulatedMap internal constructor(
     val bounds: SimulatedBounds,
@@ -149,22 +148,19 @@ class SimulatedMap internal constructor(
             get() = collisionChunk.chunkZ
     }
 
-    private val chunks =
-        ConcurrentHashMap<Long, ChunkData>()
+    private data class State(
+        val revision: SimulatedMapRevision,
+        val chunks: Map<Long, ChunkData>
+    )
 
-    private val revisionValue =
-        AtomicLong(
-            SimulatedMapRevision.INITIAL.value
-        )
+    private val state: AtomicReference<State>
 
     val revision: SimulatedMapRevision
         get() =
-            SimulatedMapRevision(
-                revisionValue.get()
-            )
+            state.get().revision
 
     val chunkCount: Int
-        get() = chunks.size
+        get() = state.get().chunks.size
 
     init {
         require(
@@ -175,6 +171,9 @@ class SimulatedMap internal constructor(
                     "${SimulatedBlockPosition.CHUNK_SIZE}x" +
                     "${SimulatedBlockPosition.CHUNK_SIZE} chunk size"
         }
+
+        val initialChunks =
+            HashMap<Long, ChunkData>()
 
         for (chunk in chunks) {
             require(
@@ -199,11 +198,22 @@ class SimulatedMap internal constructor(
                 chunk.chunkZ
             )
 
-            require(this.chunks.putIfAbsent(key, chunk) == null) {
+            require(initialChunks.put(key, chunk) == null) {
                 "Duplicate simulated map chunk: " +
                         "${chunk.chunkX}, ${chunk.chunkZ}"
             }
         }
+
+        state =
+            AtomicReference(
+                State(
+                    revision =
+                        SimulatedMapRevision.INITIAL,
+
+                    chunks =
+                        initialChunks
+                )
+            )
     }
 
     fun collisionKindAt(
@@ -518,8 +528,16 @@ class SimulatedMap internal constructor(
                 )
             }
 
+            val currentState =
+                state.get()
+
             val nextRevision =
-                nextRevision()
+                nextRevision(
+                    currentState.revision
+                )
+
+            val nextChunks =
+                HashMap(currentState.chunks)
 
             for (replacement in patch.replacements) {
                 val key =
@@ -528,7 +546,7 @@ class SimulatedMap internal constructor(
                         replacement.chunkZ
                     )
 
-                chunks[key] =
+                nextChunks[key] =
                     ChunkData(
                         collisionChunk =
                             replacement.collisionChunk,
@@ -541,8 +559,14 @@ class SimulatedMap internal constructor(
                     )
             }
 
-            revisionValue.set(
-                nextRevision.value
+            state.set(
+                State(
+                    revision =
+                        nextRevision,
+
+                    chunks =
+                        nextChunks
+                )
             )
 
             return nextRevision
@@ -553,7 +577,7 @@ class SimulatedMap internal constructor(
         chunkX: Int,
         chunkZ: Int
     ): ChunkData? =
-        chunks[
+        state.get().chunks[
             packChunkCoordinates(
                 chunkX,
                 chunkZ
@@ -561,18 +585,17 @@ class SimulatedMap internal constructor(
         ]
 
     internal fun chunkDataSnapshot(): List<ChunkData> =
-        chunks.values.toList()
+        state.get().chunks.values.toList()
 
-    private fun nextRevision(): SimulatedMapRevision {
-        val currentRevision =
-            revisionValue.get()
-
-        check(currentRevision < Long.MAX_VALUE) {
+    private fun nextRevision(
+        currentRevision: SimulatedMapRevision
+    ): SimulatedMapRevision {
+        check(currentRevision.value < Long.MAX_VALUE) {
             "Simulated map revision space exhausted"
         }
 
         return SimulatedMapRevision(
-            currentRevision + 1L
+            currentRevision.value + 1L
         )
     }
 }

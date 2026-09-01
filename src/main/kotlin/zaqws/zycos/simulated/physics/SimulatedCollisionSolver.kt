@@ -475,7 +475,8 @@ class SimulatedCollisionSolver(
             blockX.toDouble(),
 
         minimumY =
-            blockY.toDouble(),
+            blockY +
+                    collisionKind.minimumHeight,
 
         minimumZ =
             blockZ.toDouble(),
@@ -485,7 +486,7 @@ class SimulatedCollisionSolver(
 
         maximumY =
             blockY +
-                    collisionKind.collisionHeight,
+                    collisionKind.maximumHeight,
 
         maximumZ =
             blockZ + 1.0

@@ -315,14 +315,6 @@ class SimulatedMapPatchBaker(
                         water[columnIndex]
                 )
 
-                convertDeepWater(
-                    collisionKinds =
-                        collisionKinds[columnIndex],
-
-                    water =
-                        water[columnIndex]
-                )
-
                 localX++
             }
 
@@ -427,45 +419,6 @@ class SimulatedMapPatchBaker(
         }
     }
 
-    private fun convertDeepWater(
-        collisionKinds: Array<CollisionKind>,
-        water: BooleanArray
-    ) {
-        var index = 0
-
-        while (index < water.size) {
-            if (!water[index]) {
-                index++
-                continue
-            }
-
-            val startIndex = index
-
-            while (
-                index < water.size &&
-                water[index]
-            ) {
-                index++
-            }
-
-            val depth =
-                index - startIndex
-
-            if (depth < 2) {
-                continue
-            }
-
-            var waterIndex = startIndex
-
-            while (waterIndex < index) {
-                collisionKinds[waterIndex] =
-                    CollisionKind.DEEP_WATER
-
-                waterIndex++
-            }
-        }
-    }
-
     private fun buildWalkSurfaces(
         collisionKinds: Array<CollisionKind>,
         water: BooleanArray
@@ -500,20 +453,10 @@ class SimulatedMapPatchBaker(
                         SimulatedMapConfig
                             .UNITS_PER_BLOCK +
                         supportKind
-                            .collisionHeightUnits
+                            .maximumHeightUnits
 
             val nextIndex =
                 index + 1
-
-            if (
-                nextIndex <
-                collisionKinds.size &&
-                collisionKinds[nextIndex] ==
-                CollisionKind.DEEP_WATER
-            ) {
-                index++
-                continue
-            }
 
             val ceilingHeightUnits =
                 findCeilingHeightUnits(
@@ -576,9 +519,11 @@ class SimulatedMapPatchBaker(
             index <
             collisionKinds.size
         ) {
-            if (
+            val collisionKind =
                 collisionKinds[index]
-                    .blocksMovement
+
+            if (
+                collisionKind.blocksMovement
             ) {
                 val blockY =
                     bounds.minimumY +
@@ -586,7 +531,9 @@ class SimulatedMapPatchBaker(
 
                 return blockY *
                         SimulatedMapConfig
-                            .UNITS_PER_BLOCK
+                            .UNITS_PER_BLOCK +
+                        collisionKind
+                            .minimumHeightUnits
             }
 
             index++

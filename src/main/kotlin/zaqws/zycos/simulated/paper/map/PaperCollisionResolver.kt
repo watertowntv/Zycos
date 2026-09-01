@@ -20,9 +20,11 @@ fun interface PaperCollisionResolver {
                 blockData is Slab ->
                     when (blockData.type) {
                         Slab.Type.BOTTOM ->
-                            CollisionKind.HALF
+                            CollisionKind.BOTTOM_SLAB
 
-                        Slab.Type.TOP,
+                        Slab.Type.TOP ->
+                            CollisionKind.TOP_SLAB
+
                         Slab.Type.DOUBLE ->
                             CollisionKind.FULL
                     }

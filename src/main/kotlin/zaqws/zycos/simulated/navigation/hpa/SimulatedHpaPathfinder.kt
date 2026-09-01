@@ -15,6 +15,9 @@ class SimulatedHpaPathfinder(
     private val cache: SimulatedHpaCache =
         SimulatedHpaCache()
 ) : SimulatedLocalPathfinder {
+    private val localPathCache =
+        SimulatedPathCache()
+
     override fun findPath(
         map: SimulatedMap,
         request: SimulatedPathRequest
@@ -25,6 +28,10 @@ class SimulatedHpaPathfinder(
         ) {
             return invalid(request)
         }
+
+        localPathCache.invalidateBefore(
+            request.mapRevision
+        )
 
         val startClusterId =
             SimulatedHpaGraph.clusterId(
@@ -339,22 +346,31 @@ class SimulatedHpaPathfinder(
                         currentNode.clusterId
                     )
 
-                action(
-                    AbstractNode.Portal(
-                        portalId =
-                            portal.portalId,
-
-                        clusterId =
-                            otherClusterId,
-
-                        navigationNode =
-                            otherNode
-                    ),
-                    crossPortalCost(
-                        currentNode.navigationNode,
-                        otherNode
+                if (
+                    canCrossPortal(
+                        source =
+                            currentNode.navigationNode,
+                        target = otherNode,
+                        request = request
                     )
-                )
+                ) {
+                    action(
+                        AbstractNode.Portal(
+                            portalId =
+                                portal.portalId,
+
+                            clusterId =
+                                otherClusterId,
+
+                            navigationNode =
+                                otherNode
+                        ),
+                        crossPortalCost(
+                            currentNode.navigationNode,
+                            otherNode
+                        )
+                    )
+                }
 
                 val cluster =
                     graph.cluster(
@@ -447,12 +463,11 @@ class SimulatedHpaPathfinder(
         }
 
         val result =
-            localPathfinder.findPath(
-                map,
-                request.copy(
-                    start = start,
-                    target = target
-                )
+            findLocalPath(
+                map = map,
+                request = request,
+                start = start,
+                target = target
             )
 
         return when (result) {
@@ -500,6 +515,22 @@ class SimulatedHpaPathfinder(
 
         return horizontalCost +
                 verticalDifference
+    }
+
+    private fun canCrossPortal(
+        source: NavigationNode,
+        target: NavigationNode,
+        request: SimulatedPathRequest
+    ): Boolean {
+        val verticalDifferenceUnits =
+            target.floorHeightUnits -
+                    source.floorHeightUnits
+
+        return verticalDifferenceUnits <=
+                request.traversalProfile
+                    .maximumStepHeightUnits &&
+                verticalDifferenceUnits >=
+                -request.maximumDropHeightUnits
     }
 
     private fun refinePath(
@@ -555,12 +586,11 @@ class SimulatedHpaPathfinder(
             }
 
             val localResult =
-                localPathfinder.findPath(
-                    map,
-                    request.copy(
-                        start = start,
-                        target = target
-                    )
+                findLocalPath(
+                    map = map,
+                    request = request,
+                    start = start,
+                    target = target
                 )
 
             if (
@@ -630,6 +660,106 @@ class SimulatedHpaPathfinder(
 
             index++
         }
+    }
+
+    private fun findLocalPath(
+        map: SimulatedMap,
+        request: SimulatedPathRequest,
+        start: NavigationNode,
+        target: NavigationNode
+    ): SimulatedPathResult {
+        val localRequest =
+            request.copy(
+                start = start,
+                target = target
+            )
+
+        val cachedResult =
+            localPathCache.get(
+                localRequest
+            )
+
+        if (cachedResult != null) {
+            return cachedResult
+        }
+
+        val result =
+            if (
+                start.chunkX == target.chunkX &&
+                start.chunkZ == target.chunkZ &&
+                localPathfinder is
+                        SimulatedAStarPathfinder
+            ) {
+                localPathfinder
+                    .findPathInChunk(
+                        map = map,
+                        request = localRequest,
+                        chunkX = start.chunkX,
+                        chunkZ = start.chunkZ
+                    )
+            } else {
+                localPathfinder.findPath(
+                    map,
+                    localRequest
+                )
+            }
+
+        if (
+            result !is
+                    SimulatedPathResult.Success
+        ) {
+            localPathCache.put(
+                localRequest,
+                result
+            )
+
+            return result
+        }
+
+        if (
+            start.chunkX != target.chunkX ||
+            start.chunkZ != target.chunkZ
+        ) {
+            localPathCache.put(
+                localRequest,
+                result
+            )
+
+            return result
+        }
+
+        var index = 0
+
+        while (index < result.path.size) {
+            val node =
+                result.path[index]
+
+            if (
+                node.chunkX != start.chunkX ||
+                node.chunkZ != start.chunkZ
+            ) {
+                val unreachableResult =
+                    unreachable(
+                        localRequest
+                    )
+
+                localPathCache.put(
+                    localRequest,
+                    unreachableResult
+                )
+
+                return unreachableResult
+            }
+
+            index++
+        }
+
+        localPathCache.put(
+            localRequest,
+            result
+        )
+
+        return result
     }
 
     private fun reconstructAbstractPath(

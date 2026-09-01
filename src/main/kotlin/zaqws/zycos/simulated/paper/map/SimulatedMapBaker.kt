@@ -279,11 +279,6 @@ class SimulatedMapBaker(
                         waterColumns[columnIndex]
                 )
 
-                convertDeepWater(
-                    resolvedColumns[columnIndex],
-                    waterColumns[columnIndex]
-                )
-
                 localX++
             }
 
@@ -383,45 +378,6 @@ class SimulatedMapBaker(
         }
     }
 
-    private fun convertDeepWater(
-        collisionKinds: Array<CollisionKind>,
-        water: BooleanArray
-    ) {
-        var index = 0
-
-        while (index < water.size) {
-            if (!water[index]) {
-                index++
-                continue
-            }
-
-            val startIndex = index
-
-            while (
-                index < water.size &&
-                water[index]
-            ) {
-                index++
-            }
-
-            val depth =
-                index - startIndex
-
-            if (depth < 2) {
-                continue
-            }
-
-            var waterIndex = startIndex
-
-            while (waterIndex < index) {
-                collisionKinds[waterIndex] =
-                    CollisionKind.DEEP_WATER
-
-                waterIndex++
-            }
-        }
-    }
-
     private fun buildWalkSurfaces(
         bounds: SimulatedBounds,
         collisionKinds: Array<CollisionKind>,
@@ -450,20 +406,10 @@ class SimulatedMapBaker(
             val floorHeightUnits =
                 blockY *
                         SimulatedMapConfig.UNITS_PER_BLOCK +
-                        supportKind.collisionHeightUnits
+                        supportKind.maximumHeightUnits
 
             val nextIndex =
                 index + 1
-
-            if (
-                nextIndex <
-                collisionKinds.size &&
-                collisionKinds[nextIndex] ==
-                CollisionKind.DEEP_WATER
-            ) {
-                index++
-                continue
-            }
 
             val ceilingHeightUnits =
                 findCeilingHeightUnits(
@@ -533,7 +479,8 @@ class SimulatedMapBaker(
                     bounds.minimumY + index
 
                 return blockY *
-                        SimulatedMapConfig.UNITS_PER_BLOCK
+                        SimulatedMapConfig.UNITS_PER_BLOCK +
+                        collisionKind.minimumHeightUnits
             }
 
             index++
