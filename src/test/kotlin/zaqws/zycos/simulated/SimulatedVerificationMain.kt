@@ -46,6 +46,7 @@ object SimulatedVerificationMain {
         }
 
         SimulatedEngineIntegrationTest().apply {
+            `path follower emits jump event when climbing`()
             `entity without movement goal retains horizontal velocity`()
             `default engine moves enemies into range and resolves combat`()
             `external actor frame participates in targeting and combat`()

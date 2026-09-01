@@ -70,6 +70,9 @@ class PaperVisualEventHandler(
             is SimulatedEvent.Death ->
                 entityId
 
+            is SimulatedEvent.Jump ->
+                entityId
+
             is SimulatedEvent.Knockback ->
                 entityId
         }

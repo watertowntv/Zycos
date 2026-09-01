@@ -34,6 +34,11 @@ sealed interface SimulatedEvent {
         val entityId: SimulatedEntityId
     ) : SimulatedEvent
 
+    data class Jump(
+        override val tick: Long,
+        val entityId: SimulatedEntityId
+    ) : SimulatedEvent
+
     data class Knockback(
         override val tick: Long,
         val entityId: SimulatedEntityId,

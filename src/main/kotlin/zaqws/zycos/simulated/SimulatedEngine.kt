@@ -176,7 +176,8 @@ class SimulatedEngine internal constructor(
     private val pathFollower =
         SimulatedPathFollower(
             entityStore,
-            physicsConfig
+            physicsConfig,
+            ::offerEvent
         )
 
     private val navigationService =

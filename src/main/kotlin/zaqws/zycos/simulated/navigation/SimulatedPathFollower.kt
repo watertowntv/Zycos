@@ -7,6 +7,7 @@ import zaqws.zycos.simulated.entity.SimulatedEntityStore
 import zaqws.zycos.simulated.math.SimulatedMath
 import zaqws.zycos.simulated.math.SimulatedVector3
 import zaqws.zycos.simulated.physics.SimulatedPhysicsConfig
+import zaqws.zycos.simulated.snapshot.SimulatedEvent
 import zaqws.zycos.simulated.system.SimulatedSystem
 import zaqws.zycos.simulated.system.SimulatedSystemContext
 import kotlin.math.PI
@@ -17,6 +18,7 @@ internal class SimulatedPathFollower(
     private val entityStore: SimulatedEntityStore,
     private val physicsConfig: SimulatedPhysicsConfig =
         SimulatedPhysicsConfig.DEFAULT,
+    private val eventConsumer: (SimulatedEvent) -> Unit,
     private val nodeReachDistance: Double =
         DEFAULT_NODE_REACH_DISTANCE
 ) : SimulatedSystem {
@@ -153,7 +155,8 @@ internal class SimulatedPathFollower(
             if (
                 updatePath(
                     slot,
-                    entry.value
+                    entry.value,
+                    context.tick
                 )
             ) {
                 iterator.remove()
@@ -163,7 +166,8 @@ internal class SimulatedPathFollower(
 
     private fun updatePath(
         slot: Int,
-        state: PathState
+        state: PathState,
+        tick: Long
     ): Boolean {
         if (
             advanceReachedNodes(
@@ -213,7 +217,8 @@ internal class SimulatedPathFollower(
 
             attemptJump(
                 slot,
-                targetNode
+                targetNode,
+                tick
             )
 
             return false
@@ -267,7 +272,8 @@ internal class SimulatedPathFollower(
 
         attemptJump(
             slot,
-            targetNode
+            targetNode,
+            tick
         )
 
         return false
@@ -340,7 +346,8 @@ internal class SimulatedPathFollower(
 
     private fun attemptJump(
         slot: Int,
-        targetNode: NavigationNode
+        targetNode: NavigationNode,
+        tick: Long
     ) {
         if (
             !entityStore.hasFlag(
@@ -380,6 +387,13 @@ internal class SimulatedPathFollower(
             slot,
             SimulatedEntityFlag.ON_GROUND,
             false
+        )
+
+        eventConsumer(
+            SimulatedEvent.Jump(
+                tick,
+                entityStore.entityIdAt(slot)
+            )
         )
     }
 

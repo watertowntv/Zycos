@@ -1,9 +1,14 @@
 package zaqws.zycos.simulated
 
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
 import zaqws.zycos.simulated.entity.SimulatedEntity
+import zaqws.zycos.simulated.entity.SimulatedEntityFlag
+import zaqws.zycos.simulated.entity.SimulatedEntityFlags
+import zaqws.zycos.simulated.entity.SimulatedEntityStore
 import zaqws.zycos.simulated.entity.SimulatedHitbox
 import zaqws.zycos.simulated.entity.SimulatedTeam
 import zaqws.zycos.simulated.external.SimulatedExternalAction
@@ -14,9 +19,53 @@ import zaqws.zycos.simulated.goal.SimulatedGoalSet
 import zaqws.zycos.simulated.goal.builtin.SimulatedMeleeGoal
 import zaqws.zycos.simulated.goal.builtin.SimulatedNearestTargetGoal
 import zaqws.zycos.simulated.math.SimulatedVector3
+import zaqws.zycos.simulated.navigation.NavigationNode
+import zaqws.zycos.simulated.navigation.SimulatedPath
+import zaqws.zycos.simulated.navigation.SimulatedPathFollower
+import zaqws.zycos.simulated.physics.SimulatedPhysicsConfig
+import zaqws.zycos.simulated.snapshot.SimulatedEvent
+import zaqws.zycos.simulated.system.SimulatedSystemContext
 import java.util.concurrent.TimeUnit
 
 class SimulatedEngineIntegrationTest {
+    @Test
+    fun `path follower emits jump event when climbing`() {
+        val entityStore = SimulatedEntityStore()
+        val entityId = entityStore.create(
+            position = SimulatedVector3(0.5, 1.0, 0.5),
+            flags = SimulatedEntityFlags.of(SimulatedEntityFlag.ON_GROUND)
+        )
+        val events = ArrayList<SimulatedEvent>()
+        val pathFollower = SimulatedPathFollower(
+            entityStore = entityStore,
+            eventConsumer = events::add
+        )
+
+        pathFollower.setPath(
+            entityId,
+            SimulatedPath(
+                listOf(
+                    NavigationNode(0, 0, 16),
+                    NavigationNode(1, 0, 32)
+                )
+            )
+        )
+        pathFollower.update(SimulatedSystemContext(7L, 0.05))
+        pathFollower.update(SimulatedSystemContext(8L, 0.05))
+
+        assertEquals(listOf(SimulatedEvent.Jump(7L, entityId)), events)
+        assertEquals(
+            SimulatedPhysicsConfig.DEFAULT.jumpVelocity,
+            entityStore.velocity(entityStore.slotOf(entityId)).y
+        )
+        assertFalse(
+            entityStore.hasFlag(
+                entityStore.slotOf(entityId),
+                SimulatedEntityFlag.ON_GROUND
+            )
+        )
+    }
+
     @Test
     @Timeout(value = 10, unit = TimeUnit.SECONDS)
     fun `entity without movement goal retains horizontal velocity`() {
