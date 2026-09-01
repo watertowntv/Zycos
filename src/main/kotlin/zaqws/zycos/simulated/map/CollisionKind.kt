@@ -1,3 +1,5 @@
+@file:Suppress("unused")
+
 package zaqws.zycos.simulated.map
 
 enum class CollisionKind(

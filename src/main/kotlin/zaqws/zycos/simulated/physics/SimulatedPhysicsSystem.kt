@@ -131,17 +131,13 @@ internal class SimulatedPhysicsSystem(
             }
 
         val onGround =
-            if (collisionResult == null) {
-                false
-            } else {
-                (
-                        collisionResult.collidedY &&
-                                requestedMovement.y < 0.0
-                        ) ||
-                        collisionSolver.isOnGround(
-                            collisionResult.boundingBox
-                        )
-            }
+            collisionResult != null && ((
+                    collisionResult.collidedY &&
+                            requestedMovement.y < 0.0
+                    ) ||
+                    collisionSolver.isOnGround(
+                        collisionResult.boundingBox
+                    ))
 
         updateFallDistance(
             entityIdValue = entityId.value,
@@ -328,7 +324,7 @@ internal class SimulatedPhysicsSystem(
 
             if (
                 entityStore.slotOf(
-                    zaqws.zycos.simulated.entity.SimulatedEntityId(
+                    SimulatedEntityId(
                         entry.intKey
                     )
                 ) < 0

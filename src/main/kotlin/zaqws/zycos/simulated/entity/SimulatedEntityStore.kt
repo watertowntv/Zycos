@@ -1,3 +1,5 @@
+@file:Suppress("unused")
+
 package zaqws.zycos.simulated.entity
 
 import it.unimi.dsi.fastutil.ints.Int2IntOpenHashMap

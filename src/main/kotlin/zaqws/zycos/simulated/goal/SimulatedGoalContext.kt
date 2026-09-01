@@ -1,3 +1,5 @@
+@file:Suppress("unused")
+
 package zaqws.zycos.simulated.goal
 
 import zaqws.zycos.simulated.SimulatedTarget
@@ -150,7 +152,7 @@ class SimulatedGoalContext internal constructor(
                 position.distanceSquared(
                     it.position
                 )
-            } ?: radius * radius
+            } ?: (radius * radius)
 
         externalFrame.forEach { actor ->
             if (!actor.isTargetable) {

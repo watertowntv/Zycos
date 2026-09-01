@@ -1,3 +1,5 @@
+@file:Suppress("unused")
+
 package zaqws.zycos.simulated.external
 
 import zaqws.zycos.simulated.entity.SimulatedHitbox

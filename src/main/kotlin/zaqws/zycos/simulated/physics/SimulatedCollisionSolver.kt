@@ -1,3 +1,5 @@
+@file:Suppress("unused")
+
 package zaqws.zycos.simulated.physics
 
 import zaqws.zycos.simulated.map.CollisionKind

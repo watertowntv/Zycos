@@ -1,3 +1,5 @@
+@file:Suppress("unused")
+
 package zaqws.zycos.simulated.combat
 
 import zaqws.zycos.simulated.entity.SimulatedEntityId

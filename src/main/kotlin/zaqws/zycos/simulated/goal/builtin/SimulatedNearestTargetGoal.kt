@@ -72,14 +72,8 @@ class SimulatedNearestTargetGoal(
         context: SimulatedGoalContext,
         target: SimulatedGoalContext.TargetView
     ): Boolean {
-        if (
-            !target.isAlive ||
-            !target.isTargetable
-        ) {
-            return false
-        }
-
-        return relationPredicate(
+        return !(!target.isAlive ||
+                !target.isTargetable) && relationPredicate(
             context.team,
             target.team
         )

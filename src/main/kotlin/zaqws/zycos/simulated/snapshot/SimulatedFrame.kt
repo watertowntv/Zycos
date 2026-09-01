@@ -1,3 +1,5 @@
+@file:Suppress("unused")
+
 package zaqws.zycos.simulated.snapshot
 
 import zaqws.zycos.simulated.entity.SimulatedEntityFlags

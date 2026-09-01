@@ -123,7 +123,7 @@ class SimulatedAStarPathfinder(
         }
 
         val openNodes =
-            PriorityQueue<NodeCandidate>(
+            PriorityQueue(
                 compareBy<NodeCandidate> {
                     it.estimatedTotalCost
                 }.thenBy {

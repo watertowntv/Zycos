@@ -1,3 +1,5 @@
+@file:Suppress("unused")
+
 package zaqws.zycos.simulated.paper.interaction
 
 import org.bukkit.attribute.Attribute

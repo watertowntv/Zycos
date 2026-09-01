@@ -1,3 +1,5 @@
+@file:Suppress("unused")
+
 package zaqws.zycos.simulated
 
 import zaqws.zycos.simulated.map.SimulatedMap

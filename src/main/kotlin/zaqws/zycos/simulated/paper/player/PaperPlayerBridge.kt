@@ -1,3 +1,5 @@
+@file:Suppress("unused")
+
 package zaqws.zycos.simulated.paper.player
 
 import org.bukkit.plugin.java.JavaPlugin
