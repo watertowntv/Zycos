@@ -1,5 +1,3 @@
-@file:Suppress("unused")
-
 package zaqws.zycos.simulated.map
 
 import zaqws.zycos.simulated.math.SimulatedBlockPosition
@@ -218,64 +216,6 @@ class BakedChunk internal constructor(
         }
 
         return false
-    }
-
-    private inline fun forEachCollisionSpan(
-        localX: Int,
-        localZ: Int,
-        minimumY: Double,
-        maximumY: Double,
-        action: (
-            startY: Int,
-            endY: Int,
-            kind: CollisionKind
-        ) -> Unit
-    ) {
-        requireValidLocalCoordinate(
-            localX,
-            localZ
-        )
-
-        require(minimumY.isFinite())
-        require(maximumY.isFinite())
-        require(minimumY <= maximumY)
-
-        val columnIndex =
-            columnIndex(localX, localZ)
-
-        val startIndex =
-            columnOffsets[columnIndex]
-
-        val endIndex =
-            columnOffsets[columnIndex + 1]
-
-        var index = startIndex
-
-        while (index < endIndex) {
-            val kind = CollisionKind.entries[
-                spanKinds[index].toInt()
-            ]
-
-            val collisionMinimumY =
-                spanStartY[index] + kind.minimumHeight
-
-            val collisionMaximumY =
-                spanEndY[index] + kind.maximumHeight
-
-            if (collisionMinimumY >= maximumY) {
-                return
-            }
-
-            if (collisionMaximumY > minimumY) {
-                action(
-                    spanStartY[index],
-                    spanEndY[index],
-                    kind
-                )
-            }
-
-            index++
-        }
     }
 
     fun contains(

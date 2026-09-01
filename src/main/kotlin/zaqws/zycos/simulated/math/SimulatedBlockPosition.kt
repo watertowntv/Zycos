@@ -1,5 +1,3 @@
-@file:Suppress("unused")
-
 package zaqws.zycos.simulated.math
 
 import kotlin.math.floor

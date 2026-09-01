@@ -1,5 +1,3 @@
-@file:Suppress("unused")
-
 package zaqws.zycos.simulated.map
 
 class CollisionColumn private constructor(
@@ -186,26 +184,6 @@ class CollisionColumn private constructor(
         }
 
         return false
-    }
-
-    private inline fun forEachSpan(
-        action: (
-            startY: Int,
-            endY: Int,
-            kind: CollisionKind
-        ) -> Unit
-    ) {
-        var index = 0
-
-        while (index < spanCount) {
-            action(
-                spanStartY(index),
-                spanEndY(index),
-                spanKind(index)
-            )
-
-            index++
-        }
     }
 
     internal fun spanStartY(index: Int): Int =

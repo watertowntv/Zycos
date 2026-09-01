@@ -1,5 +1,3 @@
-@file:Suppress("unused")
-
 package zaqws.zycos.simulated.paper.player
 
 import org.bukkit.entity.Player
@@ -12,89 +10,45 @@ class PaperExternalActionHandler(
     private val plugin: JavaPlugin,
     private val playerProvider: PaperPlayerProvider
 ) {
-    fun handle(
-        action: SimulatedExternalAction
-    ) {
+    fun handle(action: SimulatedExternalAction) {
         if (plugin.server.isPrimaryThread) {
-            handleOnServerThread(
-                action
+            handleOnServerThread(action)
+        } else {
+            plugin.server.scheduler.runTask(
+                plugin,
+                Runnable { handleOnServerThread(action) }
             )
-
-            return
         }
-
-        plugin.server.scheduler.runTask(
-            plugin,
-            Runnable {
-                handleOnServerThread(
-                    action
-                )
-            }
-        )
     }
 
-    fun handleAll(
-        actions: Iterable<SimulatedExternalAction>
-    ) {
+    fun handleAll(actions: Iterable<SimulatedExternalAction>) {
         if (plugin.server.isPrimaryThread) {
             for (action in actions) {
-                handleOnServerThread(
-                    action
-                )
+                handleOnServerThread(action)
             }
-
             return
         }
 
-        val actionCopy =
-            actions.toList()
-
-        if (actionCopy.isEmpty()) {
-            return
-        }
+        val actionCopy = actions.toList()
+        if (actionCopy.isEmpty()) return
 
         plugin.server.scheduler.runTask(
             plugin,
             Runnable {
                 for (action in actionCopy) {
-                    handleOnServerThread(
-                        action
-                    )
+                    handleOnServerThread(action)
                 }
             }
         )
     }
 
-    private fun handleOnServerThread(
-        action: SimulatedExternalAction
-    ) {
-        val player =
-            playerProvider.player(
-                action.actorId
-            ) ?: return
-
-        if (!player.isOnline) {
-            return
-        }
+    private fun handleOnServerThread(action: SimulatedExternalAction) {
+        val player = playerProvider.player(action.actorId) ?: return
+        if (!player.isOnline) return
 
         when (action) {
-            is SimulatedExternalAction.Damage ->
-                applyDamage(
-                    player,
-                    action
-                )
-
-            is SimulatedExternalAction.Knockback ->
-                applyKnockback(
-                    player,
-                    action.velocity
-                )
-
-            is SimulatedExternalAction.SetVelocity ->
-                setVelocity(
-                    player,
-                    action.velocity
-                )
+            is SimulatedExternalAction.Damage -> applyDamage(player, action)
+            is SimulatedExternalAction.Knockback -> applyKnockback(player, action.velocity)
         }
     }
 
@@ -102,55 +56,19 @@ class PaperExternalActionHandler(
         player: Player,
         action: SimulatedExternalAction.Damage
     ) {
-        if (
-            player.isDead ||
-            action.amount <= 0.0
-        ) {
-            return
+        if (!player.isDead && action.amount > 0.0) {
+            player.damage(action.amount)
         }
+    }
 
-        player.damage(
-            action.amount
+    private fun applyKnockback(player: Player, velocity: SimulatedVector3) {
+        if (player.isDead) return
+
+        val currentVelocity = player.velocity
+        player.velocity = Vector(
+            currentVelocity.x + velocity.x,
+            currentVelocity.y + velocity.y,
+            currentVelocity.z + velocity.z
         )
-    }
-
-    private fun applyKnockback(
-        player: Player,
-        velocity: SimulatedVector3
-    ) {
-        if (player.isDead) {
-            return
-        }
-
-        val currentVelocity =
-            player.velocity
-
-        player.velocity =
-            Vector(
-                currentVelocity.x +
-                        velocity.x,
-
-                currentVelocity.y +
-                        velocity.y,
-
-                currentVelocity.z +
-                        velocity.z
-            )
-    }
-
-    private fun setVelocity(
-        player: Player,
-        velocity: SimulatedVector3
-    ) {
-        if (player.isDead) {
-            return
-        }
-
-        player.velocity =
-            Vector(
-                velocity.x,
-                velocity.y,
-                velocity.z
-            )
     }
 }

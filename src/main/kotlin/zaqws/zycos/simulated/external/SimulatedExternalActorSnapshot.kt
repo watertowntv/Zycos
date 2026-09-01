@@ -1,10 +1,21 @@
-@file:Suppress("unused")
-
 package zaqws.zycos.simulated.external
 
 import zaqws.zycos.simulated.entity.SimulatedHitbox
 import zaqws.zycos.simulated.entity.SimulatedTeam
 import zaqws.zycos.simulated.math.SimulatedVector3
+
+@JvmInline
+value class SimulatedExternalActorId(val value: Long) {
+    init {
+        require(value > 0L)
+    }
+
+    override fun toString() = value.toString()
+}
+
+interface SimulatedExternalActorProvider {
+    fun capture(sequence: Long): SimulatedExternalFrame
+}
 
 data class SimulatedExternalActorSnapshot(
     val actorId: SimulatedExternalActorId,

@@ -1,5 +1,3 @@
-@file:Suppress("unused")
-
 package zaqws.zycos.simulated.paper.render
 
 import zaqws.zycos.ClientEntityManager
@@ -70,9 +68,6 @@ class PaperVisualEventHandler(
                 entityId
 
             is SimulatedEvent.Death ->
-                entityId
-
-            is SimulatedEvent.Jump ->
                 entityId
 
             is SimulatedEvent.Knockback ->

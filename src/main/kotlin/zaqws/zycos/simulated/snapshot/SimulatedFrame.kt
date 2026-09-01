@@ -1,5 +1,3 @@
-@file:Suppress("unused")
-
 package zaqws.zycos.simulated.snapshot
 
 import zaqws.zycos.simulated.entity.SimulatedEntityFlags
@@ -7,6 +5,7 @@ import zaqws.zycos.simulated.entity.SimulatedEntityId
 import zaqws.zycos.simulated.entity.SimulatedPresentationId
 import zaqws.zycos.simulated.entity.SimulatedTeam
 import zaqws.zycos.simulated.math.SimulatedVector3
+import java.util.concurrent.atomic.AtomicReference
 
 class SimulatedFrame internal constructor(
     val tick: Long,
@@ -132,5 +131,20 @@ class SimulatedFrame internal constructor(
         require(index in entityIds.indices) {
             "Invalid simulated frame entity index: $index"
         }
+    }
+}
+
+internal class SimulatedFramePublisher {
+    private val reference = AtomicReference(SimulatedFrame.EMPTY)
+
+    val latest: SimulatedFrame
+        get() = reference.get()
+
+    fun publish(frame: SimulatedFrame) {
+        reference.set(frame)
+    }
+
+    fun clear() {
+        reference.set(SimulatedFrame.EMPTY)
     }
 }

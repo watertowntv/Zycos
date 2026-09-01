@@ -3,8 +3,7 @@ package zaqws.zycos.simulated.navigation
 import zaqws.zycos.simulated.paper.map.SimulatedMapRevision
 
 internal class SimulatedPathCache(
-    private val maximumEntries: Int =
-        DEFAULT_MAXIMUM_ENTRIES
+    private val maximumEntries: Int = DEFAULT_MAXIMUM_ENTRIES
 ) {
     companion object {
         private const val DEFAULT_MAXIMUM_ENTRIES = 4096
@@ -14,11 +13,9 @@ internal class SimulatedPathCache(
     private data class CacheKey(
         val start: NavigationNode,
         val target: NavigationNode,
-        val traversalProfile:
-        SimulatedTraversalProfile,
+        val traversalProfile: SimulatedTraversalProfile,
         val maximumDropHeightUnits: Int,
-        val mapRevision:
-        SimulatedMapRevision
+        val mapRevision: SimulatedMapRevision
     )
 
     private sealed interface CacheValue {
@@ -27,128 +24,59 @@ internal class SimulatedPathCache(
             val totalCost: Double
         ) : CacheValue
 
-        data object Unreachable :
-            CacheValue
+        data object Unreachable : CacheValue
     }
 
-    private val cache =
-        object :
-            LinkedHashMap<
-                    CacheKey,
-                    CacheValue
-                    >(
-                maximumEntries,
-                DEFAULT_LOAD_FACTOR,
-                true
-            ) {
-            override fun removeEldestEntry(
-                eldest:
-                MutableMap.MutableEntry<
-                        CacheKey,
-                        CacheValue
-                        >?
-            ): Boolean =
-                size >
-                        maximumEntries
-        }
+    private val cache = object : LinkedHashMap<CacheKey, CacheValue>(
+        maximumEntries,
+        DEFAULT_LOAD_FACTOR,
+        true
+    ) {
+        override fun removeEldestEntry(
+            eldest: MutableMap.MutableEntry<CacheKey, CacheValue>?
+        ) = size > maximumEntries
+    }
 
     init {
         require(maximumEntries > 0)
     }
 
     @Synchronized
-    fun get(
-        request: SimulatedPathRequest
-    ): SimulatedPathResult? {
-        val value =
-            cache[
-                keyOf(request)
-            ] ?: return null
+    fun get(request: SimulatedPathRequest): SimulatedPathResult? =
+        when (val value = cache[keyOf(request)] ?: return null) {
+            is CacheValue.Success -> SimulatedPathResult.Success(
+                requestId = request.requestId,
+                entityId = request.entityId,
+                mapRevision = request.mapRevision,
+                path = value.path,
+                totalCost = value.totalCost
+            )
 
-        return when (value) {
-            is CacheValue.Success ->
-                SimulatedPathResult.Success(
-                    requestId =
-                        request.requestId,
-
-                    entityId =
-                        request.entityId,
-
-                    mapRevision =
-                        request.mapRevision,
-
-                    path =
-                        value.path,
-
-                    totalCost =
-                        value.totalCost
-                )
-
-            CacheValue.Unreachable ->
-                SimulatedPathResult.Unreachable(
-                    requestId =
-                        request.requestId,
-
-                    entityId =
-                        request.entityId,
-
-                    mapRevision =
-                        request.mapRevision
-                )
+            CacheValue.Unreachable -> SimulatedPathResult.Unreachable(
+                requestId = request.requestId,
+                entityId = request.entityId,
+                mapRevision = request.mapRevision
+            )
         }
+
+    @Synchronized
+    fun put(request: SimulatedPathRequest, result: SimulatedPathResult) {
+        if (result.mapRevision != request.mapRevision) return
+
+        val value = when (result) {
+            is SimulatedPathResult.Success ->
+                CacheValue.Success(result.path, result.totalCost)
+
+            is SimulatedPathResult.Unreachable -> CacheValue.Unreachable
+            is SimulatedPathResult.Invalid -> return
+        }
+
+        cache[keyOf(request)] = value
     }
 
     @Synchronized
-    fun put(
-        request: SimulatedPathRequest,
-        result: SimulatedPathResult
-    ) {
-        if (
-            result.mapRevision !=
-            request.mapRevision
-        ) {
-            return
-        }
-
-        val value =
-            when (result) {
-                is SimulatedPathResult.Success ->
-                    CacheValue.Success(
-                        path =
-                            result.path,
-
-                        totalCost =
-                            result.totalCost
-                    )
-
-                is SimulatedPathResult.Unreachable ->
-                    CacheValue.Unreachable
-
-                is SimulatedPathResult.Invalid ->
-                    return
-            }
-
-        cache[
-            keyOf(request)
-        ] = value
-    }
-
-    @Synchronized
-    fun invalidateBefore(
-        revision: SimulatedMapRevision
-    ) {
-        val iterator =
-            cache.keys.iterator()
-
-        while (iterator.hasNext()) {
-            if (
-                iterator.next()
-                    .mapRevision <
-                revision
-            ) {
-                iterator.remove()
-            }
-        }
+    fun invalidateBefore(revision: SimulatedMapRevision) {
+        cache.keys.removeIf { it.mapRevision < revision }
     }
 
     @Synchronized
@@ -156,26 +84,11 @@ internal class SimulatedPathCache(
         cache.clear()
     }
 
-    @Synchronized
-    fun size(): Int =
-        cache.size
-
-    private fun keyOf(
-        request: SimulatedPathRequest
-    ) = CacheKey(
-        start =
-            request.start,
-
-        target =
-            request.target,
-
-        traversalProfile =
-            request.traversalProfile,
-
-        maximumDropHeightUnits =
-            request.maximumDropHeightUnits,
-
-        mapRevision =
-            request.mapRevision
+    private fun keyOf(request: SimulatedPathRequest) = CacheKey(
+        start = request.start,
+        target = request.target,
+        traversalProfile = request.traversalProfile,
+        maximumDropHeightUnits = request.maximumDropHeightUnits,
+        mapRevision = request.mapRevision
     )
 }

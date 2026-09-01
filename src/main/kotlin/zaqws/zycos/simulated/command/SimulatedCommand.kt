@@ -5,6 +5,7 @@ import zaqws.zycos.simulated.entity.SimulatedEntitySpawnData
 import zaqws.zycos.simulated.entity.SimulatedPresentationId
 import zaqws.zycos.simulated.entity.SimulatedTeam
 import zaqws.zycos.simulated.math.SimulatedVector3
+import java.util.concurrent.ConcurrentLinkedQueue
 
 internal sealed interface SimulatedCommand {
     data class Spawn(
@@ -52,4 +53,33 @@ internal sealed interface SimulatedCommand {
         val entityId: SimulatedEntityId,
         val presentationId: SimulatedPresentationId
     ) : SimulatedCommand
+}
+
+internal class SimulatedCommandQueue {
+    private val queue = ConcurrentLinkedQueue<SimulatedCommand>()
+
+    fun offer(command: SimulatedCommand) {
+        queue.offer(command)
+    }
+
+    fun drain(
+        maximumCommands: Int = Int.MAX_VALUE,
+        consumer: (SimulatedCommand) -> Unit
+    ): Int {
+        require(maximumCommands >= 0)
+
+        var processedCommands = 0
+
+        while (processedCommands < maximumCommands) {
+            val command = queue.poll() ?: break
+            consumer(command)
+            processedCommands++
+        }
+
+        return processedCommands
+    }
+
+    fun clear() {
+        queue.clear()
+    }
 }

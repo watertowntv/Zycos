@@ -1,5 +1,3 @@
-@file:Suppress("unused")
-
 package zaqws.zycos.simulated
 
 import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap
@@ -30,9 +28,6 @@ import zaqws.zycos.simulated.snapshot.SimulatedFrame
 import zaqws.zycos.simulated.snapshot.SimulatedFramePublisher
 import zaqws.zycos.simulated.system.SimulatedSystem
 import zaqws.zycos.simulated.system.SimulatedSystemContext
-import zaqws.zycos.simulated.system.SimulatedSystemPipeline
-import zaqws.zycos.simulated.system.SimulatedInterestSystem
-import zaqws.zycos.simulated.system.SimulatedSpatialSystem
 import zaqws.zycos.simulated.spatial.SimulatedEntityQuery
 import zaqws.zycos.simulated.spatial.SimulatedInterestIndex
 import zaqws.zycos.simulated.spatial.SimulatedSpatialIndex
@@ -232,35 +227,16 @@ class SimulatedEngine internal constructor(
             )
         }
 
-    private val systemPipeline =
-        SimulatedSystemPipeline(
-            listOf(
-                SimulatedSpatialSystem(
-                    entityStore,
-                    spatialIndex
-                ),
-                SimulatedInterestSystem(
-                    entityStore,
-                    interestIndex,
-                    ::externalFrame
-                ),
-                goalSystem,
-                navigationSystem,
-                pathFollower,
-                SimulatedLookSystem(
-                    entityStore,
-                    goalSystem
-                ),
-                SimulatedSeparationSystem(
-                    entityStore = entityStore,
-                    spatialIndex = spatialIndex,
-                    config = physicsConfig,
-                    requireFullSimulation = false
-                ),
-                physicsSystem,
-                combatSystem
-            )
-        )
+    private val lookSystem = SimulatedLookSystem(entityStore, goalSystem)
+
+    private val separationSystem = SimulatedSeparationSystem(
+        entityStore = entityStore,
+        spatialIndex = spatialIndex,
+        config = physicsConfig,
+        requireFullSimulation = false
+    )
+
+    private val customSystems = ArrayList<SimulatedSystem>()
 
     private val engineJob = SupervisorJob()
 
@@ -665,7 +641,7 @@ class SimulatedEngine internal constructor(
                 "Systems can only be registered before SimulatedEngine starts"
             }
 
-            systemPipeline.add(system)
+            customSystems.add(system)
         }
     }
 
@@ -729,13 +705,25 @@ class SimulatedEngine internal constructor(
             currentTick
         )
 
-        systemPipeline.update(
-            SimulatedSystemContext(
-                tick = currentTick,
-                deltaSeconds =
-                    1.0 / config.simulationTicksPerSecond
-            )
+        val context = SimulatedSystemContext(
+            tick = currentTick,
+            deltaSeconds = 1.0 / config.simulationTicksPerSecond
         )
+
+        spatialIndex.rebuild(entityStore)
+        interestIndex.rebuild(currentExternalFrame)
+        interestIndex.updateEntitySimulationFlags(entityStore)
+        goalSystem.update(context)
+        navigationSystem.update(context)
+        pathFollower.update(context)
+        lookSystem.update(context)
+        separationSystem.update(context)
+        physicsSystem.update(context)
+        combatSystem.update(context)
+
+        for (system in customSystems) {
+            system.update(context)
+        }
 
         publishFrame(
             currentTick

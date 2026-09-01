@@ -10,3 +10,7 @@ interface SimulatedGoal {
         intents: MutableCollection<SimulatedIntent>
     )
 }
+
+interface SimulatedGoalRuntime {
+    data object EMPTY : SimulatedGoalRuntime
+}

@@ -1,5 +1,3 @@
-@file:Suppress("unused")
-
 package zaqws.zycos.simulated.goal
 
 class SimulatedGoalSet private constructor(

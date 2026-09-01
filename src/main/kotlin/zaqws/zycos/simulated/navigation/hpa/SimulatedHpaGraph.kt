@@ -1,5 +1,3 @@
-@file:Suppress("unused")
-
 package zaqws.zycos.simulated.navigation.hpa
 
 import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap
@@ -66,21 +64,6 @@ class SimulatedHpaGraph private constructor(
     ) {
         val iterator =
             clusters.values.iterator()
-
-        while (iterator.hasNext()) {
-            action(
-                iterator.next()
-            )
-        }
-    }
-
-    private inline fun forEachPortal(
-        action: (
-            SimulatedHpaPortal
-        ) -> Unit
-    ) {
-        val iterator =
-            portals.values.iterator()
 
         while (iterator.hasNext()) {
             action(

@@ -19,6 +19,32 @@ import java.util.concurrent.TimeUnit
 class SimulatedEngineIntegrationTest {
     @Test
     @Timeout(value = 10, unit = TimeUnit.SECONDS)
+    fun `entity without movement goal retains horizontal velocity`() {
+        val engine = SimulatedEngineBuilder(TestSimulatedMapFactory.create())
+            .config(SimulatedConfig(navigationWorkerCount = 1))
+            .build()
+
+        try {
+            val entity = engine.spawn {
+                position(2.5, 1.0, 2.5)
+                velocity(0.2, 0.0, 0.0)
+            }
+
+            engine.start()
+
+            assertTrue(
+                waitUntil {
+                    engine.tick >= 3L &&
+                            (entity.snapshot()?.position?.x ?: 0.0) > 2.5
+                }
+            )
+        } finally {
+            engine.close()
+        }
+    }
+
+    @Test
+    @Timeout(value = 10, unit = TimeUnit.SECONDS)
     fun `default engine moves enemies into range and resolves combat`() {
         val engine =
             SimulatedEngineBuilder(

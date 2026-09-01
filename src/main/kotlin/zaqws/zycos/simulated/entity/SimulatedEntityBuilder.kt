@@ -1,5 +1,3 @@
-@file:Suppress("unused")
-
 package zaqws.zycos.simulated.entity
 
 import zaqws.zycos.simulated.goal.SimulatedGoalSet

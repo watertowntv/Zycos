@@ -10,7 +10,6 @@ data class SimulatedConfig(
         DEFAULT_MAXIMUM_QUEUED_EXTERNAL_ACTIONS,
     val goalIntervalTicks: Int = DEFAULT_GOAL_INTERVAL_TICKS,
     val targetSearchIntervalTicks: Int = DEFAULT_TARGET_SEARCH_INTERVAL_TICKS,
-    val remoteSimulationIntervalTicks: Int = DEFAULT_REMOTE_SIMULATION_INTERVAL_TICKS,
     val fullSimulationRadius: Double = DEFAULT_FULL_SIMULATION_RADIUS,
     val spatialCellSize: Double = DEFAULT_SPATIAL_CELL_SIZE,
     val gravityPerTick: Double = DEFAULT_GRAVITY_PER_TICK,
@@ -36,7 +35,6 @@ data class SimulatedConfig(
 
         const val DEFAULT_GOAL_INTERVAL_TICKS = 4
         const val DEFAULT_TARGET_SEARCH_INTERVAL_TICKS = 5
-        const val DEFAULT_REMOTE_SIMULATION_INTERVAL_TICKS = 2
 
         const val DEFAULT_FULL_SIMULATION_RADIUS = 96.0
         const val DEFAULT_SPATIAL_CELL_SIZE = 4.0
@@ -68,8 +66,6 @@ data class SimulatedConfig(
 
         require(goalIntervalTicks > 0)
         require(targetSearchIntervalTicks > 0)
-        require(remoteSimulationIntervalTicks > 0)
-
         require(fullSimulationRadius.isFinite())
         require(fullSimulationRadius >= 0.0)
 

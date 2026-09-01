@@ -1,5 +1,3 @@
-@file:Suppress("unused")
-
 package zaqws.zycos.simulated.map
 
 import zaqws.zycos.simulated.math.SimulatedBlockPosition

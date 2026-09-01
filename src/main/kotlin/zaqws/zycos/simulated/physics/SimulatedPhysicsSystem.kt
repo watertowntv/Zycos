@@ -1,5 +1,3 @@
-@file:Suppress("unused")
-
 package zaqws.zycos.simulated.physics
 
 import it.unimi.dsi.fastutil.ints.Int2DoubleOpenHashMap

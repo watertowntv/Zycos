@@ -5,7 +5,6 @@ import zaqws.zycos.simulated.map.SimulatedMapPatchTest
 import zaqws.zycos.simulated.map.WalkSurfaceTest
 import zaqws.zycos.simulated.navigation.SimulatedAStarPathfinderTest
 import zaqws.zycos.simulated.navigation.hpa.SimulatedHpaPathfinderTest
-import zaqws.zycos.simulated.navigation.jps.SimulatedJpsPathfinderTest
 import zaqws.zycos.simulated.physics.SimulatedCollisionSolverTest
 
 object SimulatedVerificationMain {
@@ -41,17 +40,13 @@ object SimulatedVerificationMain {
             `cross chunk drop remains directed and respects request drop limit`()
         }
 
-        SimulatedJpsPathfinderTest().apply {
-            `uniform floor path agrees with A star cost`()
-            `different floor heights always use local A star fallback`()
-        }
-
         SimulatedCollisionSolverTest().apply {
             `entity lands on bottom slab at half block height`()
             `solid wall clips horizontal movement`()
         }
 
         SimulatedEngineIntegrationTest().apply {
+            `entity without movement goal retains horizontal velocity`()
             `default engine moves enemies into range and resolves combat`()
             `external actor frame participates in targeting and combat`()
         }

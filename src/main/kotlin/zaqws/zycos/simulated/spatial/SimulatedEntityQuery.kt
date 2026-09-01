@@ -1,5 +1,3 @@
-@file:Suppress("unused")
-
 package zaqws.zycos.simulated.spatial
 
 import zaqws.zycos.simulated.entity.SimulatedEntityFlag

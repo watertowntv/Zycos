@@ -1,5 +1,3 @@
-@file:Suppress("unused")
-
 package zaqws.zycos.simulated.paper.player
 
 import org.bukkit.attribute.Attribute
@@ -7,6 +5,7 @@ import org.bukkit.entity.Player
 import org.bukkit.plugin.java.JavaPlugin
 import zaqws.zycos.onGround
 import zaqws.zycos.simulated.entity.SimulatedHitbox
+import zaqws.zycos.simulated.entity.SimulatedTeam
 import zaqws.zycos.simulated.external.SimulatedExternalActorFlag
 import zaqws.zycos.simulated.external.SimulatedExternalActorFlags
 import zaqws.zycos.simulated.external.SimulatedExternalActorId
@@ -16,6 +15,16 @@ import zaqws.zycos.simulated.external.SimulatedExternalFrame
 import zaqws.zycos.simulated.math.SimulatedVector3
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicLong
+
+fun interface PaperPlayerTeamResolver {
+    fun resolve(player: Player): SimulatedTeam
+
+    companion object {
+        val NONE = PaperPlayerTeamResolver { SimulatedTeam.NONE }
+
+        fun fixed(team: SimulatedTeam) = PaperPlayerTeamResolver { team }
+    }
+}
 
 class PaperPlayerProvider(
     private val plugin: JavaPlugin,

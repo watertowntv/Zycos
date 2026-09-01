@@ -1,6 +1,57 @@
-@file:Suppress("unused")
-
 package zaqws.zycos.simulated.navigation
+
+import zaqws.zycos.simulated.entity.SimulatedEntityId
+import zaqws.zycos.simulated.map.SimulatedMap
+import zaqws.zycos.simulated.paper.map.SimulatedMapRevision
+
+fun interface SimulatedLocalPathfinder {
+    fun findPath(map: SimulatedMap, request: SimulatedPathRequest): SimulatedPathResult
+}
+
+data class SimulatedPathRequest(
+    val requestId: Long,
+    val entityId: SimulatedEntityId,
+    val start: NavigationNode,
+    val target: NavigationNode,
+    val traversalProfile: SimulatedTraversalProfile,
+    val maximumDropHeightUnits: Int,
+    val mapRevision: SimulatedMapRevision
+) {
+    init {
+        require(requestId > 0L)
+        require(maximumDropHeightUnits >= 0)
+    }
+}
+
+sealed interface SimulatedPathResult {
+    val requestId: Long
+    val entityId: SimulatedEntityId
+    val mapRevision: SimulatedMapRevision
+
+    data class Success(
+        override val requestId: Long,
+        override val entityId: SimulatedEntityId,
+        override val mapRevision: SimulatedMapRevision,
+        val path: SimulatedPath,
+        val totalCost: Double
+    ) : SimulatedPathResult {
+        init {
+            require(totalCost.isFinite() && totalCost >= 0.0)
+        }
+    }
+
+    data class Unreachable(
+        override val requestId: Long,
+        override val entityId: SimulatedEntityId,
+        override val mapRevision: SimulatedMapRevision
+    ) : SimulatedPathResult
+
+    data class Invalid(
+        override val requestId: Long,
+        override val entityId: SimulatedEntityId,
+        override val mapRevision: SimulatedMapRevision
+    ) : SimulatedPathResult
+}
 
 class SimulatedPath(
     nodes: List<NavigationNode>

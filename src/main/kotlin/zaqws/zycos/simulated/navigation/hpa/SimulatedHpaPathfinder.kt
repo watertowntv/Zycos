@@ -1,5 +1,3 @@
-@file:Suppress("unused")
-
 package zaqws.zycos.simulated.navigation.hpa
 
 import zaqws.zycos.simulated.map.SimulatedMap
@@ -11,10 +9,9 @@ import kotlin.math.min
 
 class SimulatedHpaPathfinder(
     private val localPathfinder: SimulatedLocalPathfinder =
-        SimulatedAStarPathfinder(),
-    private val cache: SimulatedHpaCache =
-        SimulatedHpaCache()
+        SimulatedAStarPathfinder()
 ) : SimulatedLocalPathfinder {
+    private val cache = SimulatedHpaCache()
     private val localPathCache =
         SimulatedPathCache()
 

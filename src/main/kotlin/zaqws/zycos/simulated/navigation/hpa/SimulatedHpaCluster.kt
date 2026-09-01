@@ -1,5 +1,3 @@
-@file:Suppress("unused")
-
 package zaqws.zycos.simulated.navigation.hpa
 
 import zaqws.zycos.simulated.paper.map.SimulatedMapRevision

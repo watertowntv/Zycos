@@ -1,5 +1,3 @@
-@file:Suppress("unused")
-
 package zaqws.zycos.simulated.map
 
 import zaqws.zycos.simulated.math.SimulatedBlockPosition
@@ -255,34 +253,6 @@ class WalkSurfaceChunk internal constructor(
             surfaceAtAbsoluteIndex(resultIndex)
         } else {
             null
-        }
-    }
-
-    private inline fun forEachSurface(
-        localX: Int,
-        localZ: Int,
-        action: (WalkSurface) -> Unit
-    ) {
-        requireValidLocalCoordinate(
-            localX,
-            localZ
-        )
-
-        val columnIndex =
-            columnIndex(localX, localZ)
-
-        val endIndex =
-            columnOffsets[columnIndex + 1]
-
-        var index =
-            columnOffsets[columnIndex]
-
-        while (index < endIndex) {
-            action(
-                surfaceAtAbsoluteIndex(index)
-            )
-
-            index++
         }
     }
 
