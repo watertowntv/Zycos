@@ -8,9 +8,12 @@ import zaqws.zycos.simulated.external.SimulatedExternalAction
 import zaqws.zycos.simulated.external.SimulatedExternalActorId
 import zaqws.zycos.simulated.external.SimulatedExternalFrame
 import zaqws.zycos.simulated.goal.SimulatedGoalSystem
+import zaqws.zycos.simulated.goal.SimulatedIntent
 import zaqws.zycos.simulated.math.SimulatedMath
 import zaqws.zycos.simulated.math.SimulatedVector3
 import zaqws.zycos.simulated.snapshot.SimulatedEvent
+import zaqws.zycos.simulated.projectile.SimulatedProjectileSource
+import zaqws.zycos.simulated.projectile.SimulatedProjectileSpawnData
 import zaqws.zycos.simulated.system.SimulatedSystem
 import zaqws.zycos.simulated.system.SimulatedSystemContext
 import kotlin.math.sqrt
@@ -24,6 +27,8 @@ internal class SimulatedCombatSystem(
         () -> SimulatedExternalFrame,
     private val externalActionConsumer:
         (SimulatedExternalAction) -> Unit,
+    private val projectileConsumer:
+        (SimulatedProjectileSpawnData, Long) -> Unit,
     private val relationResolver: SimulatedRelationResolver =
         SimulatedRelationResolver.DEFAULT
 ) : SimulatedSystem {
@@ -39,12 +44,30 @@ internal class SimulatedCombatSystem(
                 val attackerEntityId =
                     entityStore.entityIdAt(slot)
 
-                val attackIntent =
-                    goalSystem.attackIntent(
+                val shootIntent =
+                    goalSystem.shootIntent(
                         attackerEntityId
                     )
 
-                if (attackIntent != null) {
+                if (shootIntent != null) {
+                    attemptShoot(
+                        attackerSlot = slot,
+                        attackerEntityId =
+                            attackerEntityId,
+                        intent = shootIntent,
+                        tick = context.tick
+                    )
+                } else {
+                    val attackIntent =
+                        goalSystem.attackIntent(
+                            attackerEntityId
+                        )
+
+                    if (attackIntent == null) {
+                        slot++
+                        continue
+                    }
+
                     attemptAttack(
                         attackerSlot = slot,
                         attackerEntityId =
@@ -59,6 +82,218 @@ internal class SimulatedCombatSystem(
 
             slot++
         }
+    }
+
+    private fun attemptShoot(
+        attackerSlot: Int,
+        attackerEntityId: SimulatedEntityId,
+        intent: SimulatedIntent.Shoot,
+        tick: Long
+    ) {
+        if (
+            entityStore
+                .attackCooldownRemainingTicks(
+                    attackerSlot
+                ) > 0
+        ) {
+            return
+        }
+
+        val spawned =
+            when (val target = intent.target) {
+                is SimulatedTarget.Entity ->
+                    attemptEntityShot(
+                        attackerSlot,
+                        attackerEntityId,
+                        target.entityId,
+                        intent,
+                        tick
+                    )
+
+                is SimulatedTarget.ExternalActor ->
+                    attemptExternalActorShot(
+                        attackerSlot,
+                        attackerEntityId,
+                        target.actorId,
+                        intent,
+                        tick
+                    )
+            }
+
+        if (spawned) {
+            entityStore
+                .setAttackCooldownRemainingTicks(
+                    attackerSlot,
+                    entityStore.attackCooldownTicks(
+                        attackerSlot
+                    )
+                )
+        }
+    }
+
+    private fun attemptEntityShot(
+        attackerSlot: Int,
+        attackerEntityId: SimulatedEntityId,
+        targetEntityId: SimulatedEntityId,
+        intent: SimulatedIntent.Shoot,
+        tick: Long
+    ): Boolean {
+        if (attackerEntityId == targetEntityId) {
+            return false
+        }
+
+        val targetSlot =
+            entityStore.slotOf(
+                targetEntityId
+            )
+
+        if (!canReceiveAttack(targetSlot)) {
+            return false
+        }
+
+        if (
+            relationResolver.resolve(
+                entityStore.team(attackerSlot),
+                entityStore.team(targetSlot)
+            ) != SimulatedRelation.ENEMY
+        ) {
+            return false
+        }
+
+        return spawnProjectile(
+            attackerSlot = attackerSlot,
+            attackerEntityId = attackerEntityId,
+            targetPosition =
+                entityStore.position(targetSlot),
+            targetHeight =
+                entityStore.hitbox(targetSlot).height,
+            targetEntityId = targetEntityId,
+            intent = intent,
+            tick = tick
+        )
+    }
+
+    private fun attemptExternalActorShot(
+        attackerSlot: Int,
+        attackerEntityId: SimulatedEntityId,
+        targetActorId: SimulatedExternalActorId,
+        intent: SimulatedIntent.Shoot,
+        tick: Long
+    ): Boolean {
+        val target =
+            externalFrameProvider()[
+                targetActorId
+            ] ?: return false
+
+        if (
+            !target.isTargetable ||
+            !target.hasCollision
+        ) {
+            return false
+        }
+
+        if (
+            relationResolver.resolve(
+                entityStore.team(attackerSlot),
+                target.team
+            ) != SimulatedRelation.ENEMY
+        ) {
+            return false
+        }
+
+        return spawnProjectile(
+            attackerSlot = attackerSlot,
+            attackerEntityId = attackerEntityId,
+            targetPosition = target.position,
+            targetHeight = target.hitbox.height,
+            targetEntityId = null,
+            intent = intent,
+            tick = tick
+        )
+    }
+
+    private fun spawnProjectile(
+        attackerSlot: Int,
+        attackerEntityId: SimulatedEntityId,
+        targetPosition: SimulatedVector3,
+        targetHeight: Double,
+        targetEntityId: SimulatedEntityId?,
+        intent: SimulatedIntent.Shoot,
+        tick: Long
+    ): Boolean {
+        val attackerPosition =
+            entityStore.position(
+                attackerSlot
+            )
+
+        if (
+            attackerPosition.distanceSquared(
+                targetPosition
+            ) >
+            intent.maximumDistance *
+                    intent.maximumDistance
+        ) {
+            return false
+        }
+
+        val origin =
+            attackerPosition.withY(
+                attackerPosition.y +
+                        entityStore.hitbox(
+                            attackerSlot
+                        ).height *
+                        PROJECTILE_ORIGIN_HEIGHT_MULTIPLIER
+            )
+
+        val target =
+            targetPosition.withY(
+                targetPosition.y +
+                        targetHeight *
+                        PROJECTILE_TARGET_HEIGHT_MULTIPLIER
+            )
+
+        val direction =
+            (target - origin)
+                .normalized()
+
+        if (
+            direction.lengthSquared <=
+            SimulatedMath.EPSILON_SQUARED
+        ) {
+            return false
+        }
+
+        projectileConsumer(
+            SimulatedProjectileSpawnData(
+                position = origin,
+                velocity =
+                    direction *
+                            intent.projectileSpeed,
+                source =
+                    SimulatedProjectileSource.Entity(
+                        attackerEntityId
+                    ),
+                team =
+                    entityStore.team(
+                        attackerSlot
+                    ),
+                definition =
+                    intent.projectileDefinition
+            ),
+            tick
+        )
+
+        eventConsumer(
+            SimulatedEvent.Attack(
+                tick = tick,
+                entityId =
+                    attackerEntityId,
+                targetEntityId =
+                    targetEntityId
+            )
+        )
+
+        return true
     }
 
     fun damage(
@@ -112,7 +347,7 @@ internal class SimulatedCombatSystem(
                 SimulatedEntityFlag.DEAD
             )
         ) {
-        eventConsumer(
+            eventConsumer(
                 SimulatedEvent.Death(
                     tick = tick,
                     entityId =
@@ -579,6 +814,14 @@ internal class SimulatedCombatSystem(
     companion object {
         private const val
                 VERTICAL_KNOCKBACK_MULTIPLIER =
+            0.5
+
+        private const val
+                PROJECTILE_ORIGIN_HEIGHT_MULTIPLIER =
+            0.75
+
+        private const val
+                PROJECTILE_TARGET_HEIGHT_MULTIPLIER =
             0.5
     }
 }

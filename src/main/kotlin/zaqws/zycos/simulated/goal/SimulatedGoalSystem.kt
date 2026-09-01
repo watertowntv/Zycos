@@ -24,7 +24,7 @@ internal class SimulatedGoalSystem(
     data class ResolvedIntents internal constructor(
         val movement: SimulatedIntent?,
         val look: SimulatedIntent.LookAt?,
-        val attack: SimulatedIntent.Attack?
+        val combat: SimulatedIntent?
     )
 
     private class EntityGoalState(
@@ -90,7 +90,16 @@ internal class SimulatedGoalSystem(
     ): SimulatedIntent.Attack? =
         resolvedIntents[
             entityId.value
-        ]?.attack
+        ]?.combat as?
+                SimulatedIntent.Attack
+
+    fun shootIntent(
+        entityId: SimulatedEntityId
+    ): SimulatedIntent.Shoot? =
+        resolvedIntents[
+            entityId.value
+        ]?.combat as?
+                SimulatedIntent.Shoot
 
     fun target(
         entityId: SimulatedEntityId
@@ -263,8 +272,8 @@ internal class SimulatedGoalSystem(
         var lookIntent:
                 SimulatedIntent.LookAt? = null
 
-        var attackIntent:
-                SimulatedIntent.Attack? = null
+        var combatIntent:
+                SimulatedIntent? = null
 
         var targetIntent:
                 SimulatedIntent.SetTarget? = null
@@ -297,11 +306,22 @@ internal class SimulatedGoalSystem(
 
                 is SimulatedIntent.Attack -> {
                     if (
-                        attackIntent == null ||
+                        combatIntent == null ||
                         intent.priority >
-                        attackIntent.priority
+                        combatIntent.priority
                     ) {
-                        attackIntent =
+                        combatIntent =
+                            intent
+                    }
+                }
+
+                is SimulatedIntent.Shoot -> {
+                    if (
+                        combatIntent == null ||
+                        intent.priority >
+                        combatIntent.priority
+                    ) {
+                        combatIntent =
                             intent
                     }
                 }
@@ -339,7 +359,7 @@ internal class SimulatedGoalSystem(
         if (
             movementIntent != null ||
             lookIntent != null ||
-            attackIntent != null
+            combatIntent != null
         ) {
             resolvedIntents.put(
                 entityId.value,
@@ -350,8 +370,8 @@ internal class SimulatedGoalSystem(
                     look =
                         lookIntent,
 
-                    attack =
-                        attackIntent
+                    combat =
+                        combatIntent
                 )
             )
         }

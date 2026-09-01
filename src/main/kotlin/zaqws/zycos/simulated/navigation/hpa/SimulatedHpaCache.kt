@@ -2,7 +2,7 @@ package zaqws.zycos.simulated.navigation.hpa
 
 import zaqws.zycos.simulated.map.SimulatedMap
 import zaqws.zycos.simulated.navigation.SimulatedTraversalProfile
-import zaqws.zycos.simulated.paper.map.SimulatedMapRevision
+import zaqws.zycos.simulated.map.SimulatedMapRevision
 
 internal class SimulatedHpaCache(
     private val maximumEntries: Int = DEFAULT_MAXIMUM_ENTRIES

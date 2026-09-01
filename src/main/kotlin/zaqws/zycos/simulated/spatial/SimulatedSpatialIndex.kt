@@ -20,6 +20,9 @@ internal class SimulatedSpatialIndex(
     var maximumHitboxHalfWidth: Double = 0.0
         private set
 
+    var maximumHitboxHeight: Double = 0.0
+        private set
+
     init {
         require(cellSize.isFinite())
         require(cellSize > 0.0)
@@ -38,6 +41,7 @@ internal class SimulatedSpatialIndex(
 
         indexedEntityCount = 0
         maximumHitboxHalfWidth = 0.0
+        maximumHitboxHeight = 0.0
 
         var slot = 0
 
@@ -58,6 +62,13 @@ internal class SimulatedSpatialIndex(
                         maximumHitboxHalfWidth,
                         entityStore.hitbox(slot)
                             .halfWidth
+                    )
+
+                maximumHitboxHeight =
+                    maxOf(
+                        maximumHitboxHeight,
+                        entityStore.hitbox(slot)
+                            .height
                     )
             }
 

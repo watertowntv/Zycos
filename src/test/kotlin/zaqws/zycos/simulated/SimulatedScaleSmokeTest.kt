@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
+import zaqws.zycos.simulated.projectile.SimulatedProjectileDefinition
 import java.util.concurrent.TimeUnit
 
 class SimulatedScaleSmokeTest {
@@ -72,6 +73,99 @@ class SimulatedScaleSmokeTest {
 
             println(
                 "SIMULATED_SCALE measuredTicks=${timing.measuredTicks} " +
+                        "averageTickNanoseconds=${timing.averageTickNanoseconds} " +
+                        "maximumTickNanoseconds=${timing.maximumTickNanoseconds}"
+            )
+        } finally {
+            engine.close()
+        }
+    }
+
+    @Test
+    @Timeout(value = 15, unit = TimeUnit.SECONDS)
+    fun `five thousand entities and one thousand projectiles publish frames`() {
+        val engine =
+            SimulatedEngineBuilder(
+                TestSimulatedMapFactory.create(
+                    chunkCountX = 6,
+                    chunkCountZ = 6
+                )
+            ).config(
+                SimulatedConfig(
+                    initialEntityCapacity = 5_000,
+                    initialProjectileCapacity = 1_000,
+                    navigationWorkerCount = 1
+                )
+            ).build()
+
+        try {
+            var index = 0
+
+            while (index < 5_000) {
+                engine.spawn {
+                    position(
+                        x = (index % 80) * 1.1 + 0.5,
+                        y = 1.0,
+                        z = (index / 80) * 1.1 + 0.5
+                    )
+                }
+
+                index++
+            }
+
+            val definition =
+                SimulatedProjectileDefinition(
+                    maximumTicks = 100,
+                    maximumRange = 128.0
+                )
+
+            index = 0
+
+            while (index < 1_000) {
+                engine.projectileManager.spawn {
+                    position(
+                        x = (index % 80) * 1.1 + 0.5,
+                        y = 4.5,
+                        z = (index / 80) * 1.1 + 0.5
+                    )
+                    definition(definition)
+                }
+
+                index++
+            }
+
+            engine.start()
+
+            val deadline =
+                System.nanoTime() +
+                        TimeUnit.SECONDS.toNanos(10L)
+
+            while (
+                System.nanoTime() < deadline &&
+                (
+                        engine.tick < 15L ||
+                                engine.latestFrame.size < 5_000 ||
+                                engine.projectileManager
+                                    .latestFrame.size < 1_000
+                        )
+            ) {
+                Thread.sleep(10L)
+            }
+
+            assertNull(engine.failure)
+            assertEquals(5_000, engine.latestFrame.size)
+            assertEquals(
+                1_000,
+                engine.projectileManager
+                    .latestFrame.size
+            )
+
+            val timing = engine.timingSnapshot()
+
+            assertTrue(timing.measuredTicks >= 15L)
+
+            println(
+                "SIMULATED_PROJECTILE_SCALE measuredTicks=${timing.measuredTicks} " +
                         "averageTickNanoseconds=${timing.averageTickNanoseconds} " +
                         "maximumTickNanoseconds=${timing.maximumTickNanoseconds}"
             )

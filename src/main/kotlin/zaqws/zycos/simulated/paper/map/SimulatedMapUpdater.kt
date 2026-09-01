@@ -3,7 +3,7 @@
 package zaqws.zycos.simulated.paper.map
 
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
@@ -15,6 +15,8 @@ import org.bukkit.event.block.BlockBreakEvent
 import org.bukkit.event.block.BlockPlaceEvent
 import org.bukkit.plugin.java.JavaPlugin
 import org.bukkit.scheduler.BukkitTask
+import zaqws.zycos.CoroutineManager.asyncDispatcher
+import zaqws.zycos.CoroutineManager.asyncScope
 import zaqws.zycos.simulated.map.SimulatedMap
 import zaqws.zycos.simulated.math.SimulatedBlockPosition
 import java.lang.Runnable
@@ -44,12 +46,15 @@ class SimulatedMapUpdater(
         AtomicBoolean(false)
 
     private val scopeJob =
-        SupervisorJob()
+        SupervisorJob(
+            plugin.asyncScope
+                .coroutineContext[Job]
+        )
 
     private val scope =
         CoroutineScope(
             scopeJob +
-                    Dispatchers.Default
+                    plugin.asyncDispatcher
         )
 
     private val scheduledTask: BukkitTask

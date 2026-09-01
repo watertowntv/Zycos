@@ -15,6 +15,7 @@ import zaqws.zycos.simulated.external.SimulatedExternalActorProvider
 import zaqws.zycos.simulated.external.SimulatedExternalActorSnapshot
 import zaqws.zycos.simulated.external.SimulatedExternalFrame
 import zaqws.zycos.simulated.math.SimulatedVector3
+import zaqws.zycos.simulated.paper.toSimulatedVector3
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicLong
 
@@ -206,18 +207,10 @@ class PaperPlayerProvider(
                 actorId(player),
 
             position =
-                SimulatedVector3(
-                    location.x,
-                    location.y,
-                    location.z
-                ),
+                location.toSimulatedVector3(),
 
             velocity =
-                SimulatedVector3(
-                    velocity.x,
-                    velocity.y,
-                    velocity.z
-                ),
+                velocity.toSimulatedVector3(),
 
             hitbox =
                 SimulatedHitbox(

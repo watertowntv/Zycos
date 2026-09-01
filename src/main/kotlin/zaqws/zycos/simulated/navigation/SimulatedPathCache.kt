@@ -1,6 +1,6 @@
 package zaqws.zycos.simulated.navigation
 
-import zaqws.zycos.simulated.paper.map.SimulatedMapRevision
+import zaqws.zycos.simulated.map.SimulatedMapRevision
 
 internal class SimulatedPathCache(
     private val maximumEntries: Int = DEFAULT_MAXIMUM_ENTRIES

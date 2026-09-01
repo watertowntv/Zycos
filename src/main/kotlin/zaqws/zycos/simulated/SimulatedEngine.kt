@@ -24,6 +24,7 @@ import zaqws.zycos.simulated.navigation.hpa.SimulatedHpaPathfinder
 import zaqws.zycos.simulated.physics.SimulatedPhysicsConfig
 import zaqws.zycos.simulated.physics.SimulatedPhysicsSystem
 import zaqws.zycos.simulated.physics.SimulatedSeparationSystem
+import zaqws.zycos.simulated.projectile.SimulatedProjectileManager
 import zaqws.zycos.simulated.snapshot.SimulatedEvent
 import zaqws.zycos.simulated.snapshot.SimulatedEventQueue
 import zaqws.zycos.simulated.snapshot.SimulatedFrame
@@ -205,13 +206,31 @@ class SimulatedEngine internal constructor(
             config = config
         )
 
+    val projectileManager =
+        SimulatedProjectileManager(
+            initialCapacity =
+                config.initialProjectileCapacity,
+            maximumQueuedEvents =
+                config.maximumQueuedEvents,
+            map = map,
+            entityStore = entityStore,
+            spatialIndex = spatialIndex,
+            commandConsumer =
+                commandQueue::offer,
+            damageConsumer =
+                ::applyProjectileDamage,
+            externalActionConsumer =
+                externalActionQueue::offer
+        )
+
     private val combatSystem =
         SimulatedCombatSystem(
             entityStore,
             goalSystem,
             ::offerEvent,
             ::externalFrame,
-            externalActionQueue::offer
+            externalActionQueue::offer,
+            projectileManager::spawnNow
         )
 
     private val physicsSystem =
@@ -269,6 +288,9 @@ class SimulatedEngine internal constructor(
 
     val entityCount: Int
         get() = latestFrame.size
+
+    val projectileCount: Int
+        get() = projectileManager.size
 
     fun timingSnapshot(): SimulatedTimingSnapshot {
         val measuredTicks =
@@ -716,6 +738,10 @@ class SimulatedEngine internal constructor(
         spatialIndex.rebuild(entityStore)
         interestIndex.rebuild(currentExternalFrame)
         interestIndex.updateEntitySimulationFlags(entityStore)
+        projectileManager.update(
+            currentTick,
+            currentExternalFrame
+        )
         goalSystem.update(context)
         navigationSystem.update(context)
         pathFollower.update(context)
@@ -729,6 +755,10 @@ class SimulatedEngine internal constructor(
         }
 
         publishFrame(
+            currentTick
+        )
+
+        projectileManager.publishFrame(
             currentTick
         )
 
@@ -810,9 +840,49 @@ class SimulatedEngine internal constructor(
 
                 is SimulatedCommand.SetPresentation ->
                     processSetPresentation(command)
+
+                is SimulatedCommand.SpawnProjectile ->
+                    projectileManager.processSpawn(
+                        command.projectileId,
+                        command.data,
+                        currentTick
+                    )
+
+                is SimulatedCommand.RemoveProjectile ->
+                    projectileManager.processRemove(
+                        command.projectileId,
+                        currentTick
+                    )
+
+                is SimulatedCommand.TeleportProjectile ->
+                    projectileManager.processTeleport(
+                        command.projectileId,
+                        command.position
+                    )
+
+                is SimulatedCommand.SetProjectileVelocity ->
+                    projectileManager.processSetVelocity(
+                        command.projectileId,
+                        command.velocity
+                    )
+
+                is SimulatedCommand.AddProjectileVelocity ->
+                    projectileManager.processAddVelocity(
+                        command.projectileId,
+                        command.velocity
+                    )
             }
         }
     }
+
+    private fun applyProjectileDamage(
+        damage: SimulatedDamage,
+        tick: Long
+    ): Double =
+        combatSystem.damage(
+            damage,
+            tick
+        )
 
     private fun processSpawn(
         command: SimulatedCommand.Spawn,
@@ -1144,6 +1214,7 @@ class SimulatedEngine internal constructor(
         visualEventQueue.clear()
         externalActionQueue.clear()
         framePublisher.clear()
+        projectileManager.close()
 
         entityStore.clear()
         goalSets.clear()

@@ -6,7 +6,6 @@ import zaqws.zycos.simulated.math.SimulatedAABB
 import zaqws.zycos.simulated.math.SimulatedBlockPosition
 import zaqws.zycos.simulated.math.SimulatedMath
 import zaqws.zycos.simulated.math.SimulatedVector3
-import zaqws.zycos.simulated.paper.map.SimulatedMapRevision
 import java.util.concurrent.atomic.AtomicReference
 
 class SimulatedMap internal constructor(

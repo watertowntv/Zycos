@@ -91,7 +91,7 @@ class SimulatedHpaPathfinderTest {
 
     private fun request(
         mapRevision:
-            zaqws.zycos.simulated.paper.map.SimulatedMapRevision,
+            zaqws.zycos.simulated.map.SimulatedMapRevision,
         start: NavigationNode,
         target: NavigationNode,
         maximumDropHeightUnits: Int

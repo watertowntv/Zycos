@@ -2,7 +2,7 @@
 
 package zaqws.zycos.simulated.navigation.hpa
 
-import zaqws.zycos.simulated.paper.map.SimulatedMapRevision
+import zaqws.zycos.simulated.map.SimulatedMapRevision
 import zaqws.zycos.simulated.navigation.NavigationNode
 
 class SimulatedHpaCluster internal constructor(

@@ -3,14 +3,28 @@ package zaqws.zycos.simulated
 import zaqws.zycos.simulated.map.CollisionColumnTest
 import zaqws.zycos.simulated.map.SimulatedMapPatchTest
 import zaqws.zycos.simulated.map.WalkSurfaceTest
+import zaqws.zycos.simulated.math.SimulatedAABBTest
 import zaqws.zycos.simulated.navigation.SimulatedAStarPathfinderTest
 import zaqws.zycos.simulated.navigation.hpa.SimulatedHpaPathfinderTest
 import zaqws.zycos.simulated.physics.SimulatedCollisionSolverTest
+import zaqws.zycos.simulated.paper.SimulatedPaperConversionsTest
 
 object SimulatedVerificationMain {
     @JvmStatic
     fun main(arguments: Array<String>) {
         require(arguments.isEmpty())
+
+        SimulatedArchitectureTest()
+            .`core has no Paper Bukkit or outer Zycos dependency`()
+
+        SimulatedPaperConversionsTest()
+            .`area and position conversions preserve normalized coordinates`()
+
+        SimulatedPaperConversionsTest()
+            .`legacy map revision alias resolves to core type`()
+
+        SimulatedAABBTest()
+            .`segment intersection returns first fraction`()
 
         CollisionColumnTest().apply {
             `stacked bottom slabs retain the air gap in each block`()
@@ -52,7 +66,19 @@ object SimulatedVerificationMain {
             `external actor frame participates in targeting and combat`()
         }
 
+        SimulatedProjectileIntegrationTest().apply {
+            `projectile handle controls lifecycle and published frame`()
+            `high speed projectile stops at first solid column`()
+            `projectile damages nearest enemy without hitting source`()
+            `ranged goal publishes projectile and damages target`()
+            `projectile emits external actor damage and knockback`()
+            `projectile lifetime and range remove with exact reasons`()
+        }
+
         SimulatedScaleSmokeTest()
             .`five thousand entities publish frames without engine failure`()
+
+        SimulatedScaleSmokeTest()
+            .`five thousand entities and one thousand projectiles publish frames`()
     }
 }

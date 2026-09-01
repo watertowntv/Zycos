@@ -4,7 +4,7 @@ package zaqws.zycos.simulated.navigation
 
 import zaqws.zycos.simulated.entity.SimulatedEntityId
 import zaqws.zycos.simulated.map.SimulatedMap
-import zaqws.zycos.simulated.paper.map.SimulatedMapRevision
+import zaqws.zycos.simulated.map.SimulatedMapRevision
 
 fun interface SimulatedLocalPathfinder {
     fun findPath(map: SimulatedMap, request: SimulatedPathRequest): SimulatedPathResult

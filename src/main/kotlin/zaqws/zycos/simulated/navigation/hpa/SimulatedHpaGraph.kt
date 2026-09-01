@@ -5,7 +5,7 @@ package zaqws.zycos.simulated.navigation.hpa
 import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap
 import zaqws.zycos.simulated.map.SimulatedMap
-import zaqws.zycos.simulated.paper.map.SimulatedMapRevision
+import zaqws.zycos.simulated.map.SimulatedMapRevision
 import zaqws.zycos.simulated.navigation.NavigationNode
 import zaqws.zycos.simulated.navigation.SimulatedTraversalProfile
 import java.util.concurrent.atomic.AtomicInteger

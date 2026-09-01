@@ -5,6 +5,8 @@ import zaqws.zycos.simulated.entity.SimulatedEntitySpawnData
 import zaqws.zycos.simulated.entity.SimulatedPresentationId
 import zaqws.zycos.simulated.entity.SimulatedTeam
 import zaqws.zycos.simulated.math.SimulatedVector3
+import zaqws.zycos.simulated.projectile.SimulatedProjectileId
+import zaqws.zycos.simulated.projectile.SimulatedProjectileSpawnData
 import java.util.concurrent.ConcurrentLinkedQueue
 
 internal sealed interface SimulatedCommand {
@@ -52,6 +54,30 @@ internal sealed interface SimulatedCommand {
     data class SetPresentation(
         val entityId: SimulatedEntityId,
         val presentationId: SimulatedPresentationId
+    ) : SimulatedCommand
+
+    data class SpawnProjectile(
+        val projectileId: SimulatedProjectileId,
+        val data: SimulatedProjectileSpawnData
+    ) : SimulatedCommand
+
+    data class RemoveProjectile(
+        val projectileId: SimulatedProjectileId
+    ) : SimulatedCommand
+
+    data class TeleportProjectile(
+        val projectileId: SimulatedProjectileId,
+        val position: SimulatedVector3
+    ) : SimulatedCommand
+
+    data class SetProjectileVelocity(
+        val projectileId: SimulatedProjectileId,
+        val velocity: SimulatedVector3
+    ) : SimulatedCommand
+
+    data class AddProjectileVelocity(
+        val projectileId: SimulatedProjectileId,
+        val velocity: SimulatedVector3
     ) : SimulatedCommand
 }
 

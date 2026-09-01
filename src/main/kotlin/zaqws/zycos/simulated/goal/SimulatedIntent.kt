@@ -2,6 +2,7 @@ package zaqws.zycos.simulated.goal
 
 import zaqws.zycos.simulated.SimulatedTarget
 import zaqws.zycos.simulated.math.SimulatedVector3
+import zaqws.zycos.simulated.projectile.SimulatedProjectileDefinition
 
 sealed interface SimulatedIntent {
     val priority: Int
@@ -43,6 +44,21 @@ sealed interface SimulatedIntent {
         val target: SimulatedTarget,
         override val priority: Int = DEFAULT_PRIORITY
     ) : SimulatedIntent
+
+    data class Shoot(
+        val target: SimulatedTarget,
+        val projectileDefinition: SimulatedProjectileDefinition,
+        val projectileSpeed: Double,
+        val maximumDistance: Double,
+        override val priority: Int = DEFAULT_PRIORITY
+    ) : SimulatedIntent {
+        init {
+            require(projectileSpeed.isFinite())
+            require(projectileSpeed > 0.0)
+            require(maximumDistance.isFinite())
+            require(maximumDistance > 0.0)
+        }
+    }
 
     data class SetTarget(
         val target: SimulatedTarget?,

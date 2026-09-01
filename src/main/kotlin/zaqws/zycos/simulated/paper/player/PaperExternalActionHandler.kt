@@ -2,11 +2,13 @@
 
 package zaqws.zycos.simulated.paper.player
 
+import kotlinx.coroutines.launch
 import org.bukkit.entity.Player
 import org.bukkit.plugin.java.JavaPlugin
-import org.bukkit.util.Vector
+import zaqws.zycos.CoroutineManager.scope
 import zaqws.zycos.simulated.external.SimulatedExternalAction
 import zaqws.zycos.simulated.math.SimulatedVector3
+import zaqws.zycos.simulated.paper.toBukkitVector
 
 class PaperExternalActionHandler(
     private val plugin: JavaPlugin,
@@ -16,10 +18,9 @@ class PaperExternalActionHandler(
         if (plugin.server.isPrimaryThread) {
             handleOnServerThread(action)
         } else {
-            plugin.server.scheduler.runTask(
-                plugin,
-                Runnable { handleOnServerThread(action) }
-            )
+            plugin.scope.launch {
+                handleOnServerThread(action)
+            }
         }
     }
 
@@ -34,14 +35,11 @@ class PaperExternalActionHandler(
         val actionCopy = actions.toList()
         if (actionCopy.isEmpty()) return
 
-        plugin.server.scheduler.runTask(
-            plugin,
-            Runnable {
-                for (action in actionCopy) {
-                    handleOnServerThread(action)
-                }
+        plugin.scope.launch {
+            for (action in actionCopy) {
+                handleOnServerThread(action)
             }
-        )
+        }
     }
 
     private fun handleOnServerThread(action: SimulatedExternalAction) {
@@ -67,10 +65,9 @@ class PaperExternalActionHandler(
         if (player.isDead) return
 
         val currentVelocity = player.velocity
-        player.velocity = Vector(
-            currentVelocity.x + velocity.x,
-            currentVelocity.y + velocity.y,
-            currentVelocity.z + velocity.z
-        )
+        player.velocity =
+            currentVelocity.add(
+                velocity.toBukkitVector()
+            )
     }
 }

@@ -11,7 +11,7 @@ import zaqws.zycos.simulated.map.SimulatedMap
 import zaqws.zycos.simulated.map.SimulatedMapConfig
 import zaqws.zycos.simulated.math.SimulatedMath
 import zaqws.zycos.simulated.math.SimulatedVector3
-import zaqws.zycos.simulated.paper.map.SimulatedMapRevision
+import zaqws.zycos.simulated.map.SimulatedMapRevision
 import zaqws.zycos.simulated.physics.MinecraftLikeFallModel
 import zaqws.zycos.simulated.physics.SimulatedFallModel
 import zaqws.zycos.simulated.system.SimulatedSystem

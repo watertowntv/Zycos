@@ -4,6 +4,8 @@ data class SimulatedConfig(
     val simulationTicksPerSecond: Int = DEFAULT_SIMULATION_TICKS_PER_SECOND,
     val maximumCatchUpTicks: Int = DEFAULT_MAXIMUM_CATCH_UP_TICKS,
     val initialEntityCapacity: Int = DEFAULT_INITIAL_ENTITY_CAPACITY,
+    val initialProjectileCapacity: Int =
+        DEFAULT_INITIAL_PROJECTILE_CAPACITY,
     val maximumCommandsPerTick: Int = DEFAULT_MAXIMUM_COMMANDS_PER_TICK,
     val maximumQueuedEvents: Int = DEFAULT_MAXIMUM_QUEUED_EVENTS,
     val maximumQueuedExternalActions: Int =
@@ -29,6 +31,7 @@ data class SimulatedConfig(
         const val DEFAULT_MAXIMUM_CATCH_UP_TICKS = 2
 
         const val DEFAULT_INITIAL_ENTITY_CAPACITY = 512
+        const val DEFAULT_INITIAL_PROJECTILE_CAPACITY = 128
         const val DEFAULT_MAXIMUM_COMMANDS_PER_TICK = 100_000
         const val DEFAULT_MAXIMUM_QUEUED_EVENTS = 16_384
         const val DEFAULT_MAXIMUM_QUEUED_EXTERNAL_ACTIONS = 8_192
@@ -60,6 +63,7 @@ data class SimulatedConfig(
         require(simulationTicksPerSecond > 0)
         require(maximumCatchUpTicks >= 0)
         require(initialEntityCapacity > 0)
+        require(initialProjectileCapacity > 0)
         require(maximumCommandsPerTick > 0)
         require(maximumQueuedEvents > 0)
         require(maximumQueuedExternalActions > 0)

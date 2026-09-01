@@ -1,11 +1,11 @@
 package zaqws.zycos.simulated.paper.map
 
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import org.bukkit.ChunkSnapshot
 import org.bukkit.World
 import org.bukkit.plugin.java.JavaPlugin
+import zaqws.zycos.CoroutineManager.asyncDispatcher
+import zaqws.zycos.CoroutineManager.mainDispatcher
 import zaqws.zycos.simulated.map.BakedChunk
 import zaqws.zycos.simulated.map.CollisionColumn
 import zaqws.zycos.simulated.map.CollisionKind
@@ -14,8 +14,6 @@ import zaqws.zycos.simulated.map.SimulatedMapConfig
 import zaqws.zycos.simulated.map.SimulatedMapPatch
 import zaqws.zycos.simulated.map.WalkSurface
 import zaqws.zycos.simulated.map.WalkSurfaceChunk
-import kotlin.coroutines.resume
-import kotlin.coroutines.resumeWithException
 
 class SimulatedMapPatchBaker(
     private val plugin: JavaPlugin,
@@ -171,7 +169,7 @@ class SimulatedMapPatchBaker(
             )
 
         val bakedChunks =
-            withContext(Dispatchers.Default) {
+            withContext(plugin.asyncDispatcher) {
                 capturedChunks.map(
                     ::bakeChunk
                 )
@@ -193,70 +191,21 @@ class SimulatedMapPatchBaker(
     private suspend fun captureSnapshots(
         coordinates: List<ChunkCoordinate>
     ): List<CapturedChunk> =
-        suspendCancellableCoroutine { continuation ->
-            val coordinateCopy =
-                coordinates.toList()
-
-            val task =
-                plugin.server.scheduler.runTask(
-                    plugin,
-                    Runnable {
-                        if (!continuation.isActive) {
-                            return@Runnable
-                        }
-
-                        try {
-                            val capturedChunks =
-                                ArrayList<CapturedChunk>(
-                                    coordinateCopy.size
-                                )
-
-                            for (
-                            (chunkX, chunkZ) in
-                            coordinateCopy
-                            ) {
-                                val snapshot =
-                                    world.getChunkAt(
-                                        chunkX,
-                                        chunkZ
-                                    ).getChunkSnapshot(
-                                        false,
-                                        false,
-                                        false
-                                    )
-
-                                capturedChunks.add(
-                                    CapturedChunk(
-                                        chunkX =
-                                            chunkX,
-
-                                        chunkZ =
-                                            chunkZ,
-
-                                        snapshot =
-                                            snapshot
-                                    )
-                                )
-                            }
-
-                            continuation.resume(
-                                capturedChunks
-                            )
-                        } catch (
-                            throwable: Throwable
-                        ) {
-                            continuation
-                                .resumeWithException(
-                                    throwable
-                                )
-                        }
-                    }
+        withContext(plugin.mainDispatcher) {
+            coordinates.map { (chunkX, chunkZ) ->
+                CapturedChunk(
+                    chunkX = chunkX,
+                    chunkZ = chunkZ,
+                    snapshot =
+                        world.getChunkAt(
+                            chunkX,
+                            chunkZ
+                        ).getChunkSnapshot(
+                            false,
+                            false,
+                            false
+                        )
                 )
-
-            continuation.invokeOnCancellation {
-                if (!task.isCancelled) {
-                    task.cancel()
-                }
             }
         }
 

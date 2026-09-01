@@ -54,6 +54,93 @@ data class SimulatedAABB(
                 position.y in minimumY..maximumY &&
                 position.z in minimumZ..maximumZ
 
+    fun segmentIntersectionFraction(
+        start: SimulatedVector3,
+        end: SimulatedVector3
+    ): Double? {
+        require(start.isFinite)
+        require(end.isFinite)
+
+        var minimumFraction = 0.0
+        var maximumFraction = 1.0
+
+        fun clip(
+            startValue: Double,
+            difference: Double,
+            minimum: Double,
+            maximum: Double
+        ): Boolean {
+            if (
+                kotlin.math.abs(difference) <=
+                SimulatedMath.EPSILON
+            ) {
+                return startValue in minimum..maximum
+            }
+
+            val inverseDifference =
+                1.0 / difference
+
+            var first =
+                (minimum - startValue) *
+                        inverseDifference
+
+            var second =
+                (maximum - startValue) *
+                        inverseDifference
+
+            if (first > second) {
+                val previousFirst = first
+                first = second
+                second = previousFirst
+            }
+
+            minimumFraction =
+                maxOf(
+                    minimumFraction,
+                    first
+                )
+
+            maximumFraction =
+                minOf(
+                    maximumFraction,
+                    second
+                )
+
+            return minimumFraction <=
+                    maximumFraction
+        }
+
+        val difference = end - start
+
+        if (
+            !clip(
+                start.x,
+                difference.x,
+                minimumX,
+                maximumX
+            ) ||
+            !clip(
+                start.y,
+                difference.y,
+                minimumY,
+                maximumY
+            ) ||
+            !clip(
+                start.z,
+                difference.z,
+                minimumZ,
+                maximumZ
+            )
+        ) {
+            return null
+        }
+
+        return minimumFraction.coerceIn(
+            0.0,
+            1.0
+        )
+    }
+
     fun moved(offset: SimulatedVector3) = moved(
         offset.x,
         offset.y,
