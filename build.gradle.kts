@@ -25,6 +25,7 @@ dependencies {
     implementation(kotlin("reflect"))
 
     testImplementation("org.junit.jupiter:junit-jupiter:6.1.2")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher:6.1.2")
 
     compileOnly("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.11.0")
     compileOnly("org.jetbrains.kotlinx:kotlinx-serialization-cbor:1.11.0")
