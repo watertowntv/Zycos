@@ -14,6 +14,8 @@ import zaqws.zycos.simulated.external.SimulatedExternalActorFlags
 import zaqws.zycos.simulated.external.SimulatedExternalActorId
 import zaqws.zycos.simulated.external.SimulatedExternalFrame
 import zaqws.zycos.simulated.math.SimulatedVector3
+import zaqws.zycos.simulated.projectile.SimulatedProjectileDefinition
+import zaqws.zycos.simulated.signal.SimulatedSignal
 import zaqws.zycos.simulated.spatial.SimulatedEntityQuery
 
 class SimulatedGoalContext internal constructor(
@@ -22,7 +24,9 @@ class SimulatedGoalContext internal constructor(
     private val externalFrame: SimulatedExternalFrame,
     val entityId: SimulatedEntityId,
     val tick: Long,
-    val currentTarget: SimulatedTarget?
+    val currentTarget: SimulatedTarget?,
+    private val actionConsumer:
+        (SimulatedGoalAction) -> Unit
 ) {
     val currentTargetEntityId: SimulatedEntityId?
         get() =
@@ -249,6 +253,163 @@ class SimulatedGoalContext internal constructor(
         }
 
         return entities
+    }
+
+    fun targetsWithin(
+        radius: Double,
+        predicate: (
+            TargetView
+        ) -> Boolean = { true }
+    ): List<TargetView> {
+        require(radius.isFinite())
+        require(radius >= 0.0)
+
+        val targets =
+            ArrayList<TargetView>()
+
+        targets.addAll(
+            entitiesWithin(radius) {
+                predicate(it)
+            }
+        )
+
+        val radiusSquared = radius * radius
+
+        externalFrame.forEach { actor ->
+            if (
+                position.distanceSquared(
+                    actor.position
+                ) > radiusSquared
+            ) {
+                return@forEach
+            }
+
+            val target = externalActorView(actor)
+
+            if (predicate(target)) {
+                targets.add(target)
+            }
+        }
+
+        return targets
+    }
+
+    fun setVelocity(
+        velocity: SimulatedVector3,
+        priority: Int = SimulatedIntent.DEFAULT_PRIORITY
+    ) {
+        require(velocity.isFinite)
+        actionConsumer(
+            SimulatedGoalAction.SetVelocity(
+                entityId,
+                velocity,
+                priority
+            )
+        )
+    }
+
+    fun addVelocity(
+        velocity: SimulatedVector3
+    ) {
+        require(velocity.isFinite)
+        actionConsumer(
+            SimulatedGoalAction.AddVelocity(
+                entityId,
+                velocity
+            )
+        )
+    }
+
+    fun teleport(
+        position: SimulatedVector3,
+        priority: Int = SimulatedIntent.DEFAULT_PRIORITY
+    ) {
+        require(position.isFinite)
+        actionConsumer(
+            SimulatedGoalAction.Teleport(
+                entityId,
+                position,
+                priority
+            )
+        )
+    }
+
+    fun damage(
+        target: SimulatedTarget,
+        amount: Double
+    ) {
+        require(amount.isFinite())
+        require(amount >= 0.0)
+        actionConsumer(
+            SimulatedGoalAction.Damage(
+                entityId,
+                target,
+                amount
+            )
+        )
+    }
+
+    fun heal(
+        targetEntityId: SimulatedEntityId,
+        amount: Double
+    ) {
+        require(amount.isFinite())
+        require(amount >= 0.0)
+        actionConsumer(
+            SimulatedGoalAction.Heal(
+                entityId,
+                targetEntityId,
+                amount
+            )
+        )
+    }
+
+    fun heal(amount: Double) {
+        heal(
+            entityId,
+            amount
+        )
+    }
+
+    fun knockback(
+        target: SimulatedTarget,
+        velocity: SimulatedVector3
+    ) {
+        require(velocity.isFinite)
+        actionConsumer(
+            SimulatedGoalAction.Knockback(
+                entityId,
+                target,
+                velocity
+            )
+        )
+    }
+
+    fun spawnProjectile(
+        position: SimulatedVector3,
+        velocity: SimulatedVector3,
+        definition: SimulatedProjectileDefinition =
+            SimulatedProjectileDefinition.DEFAULT
+    ) {
+        require(position.isFinite)
+        require(velocity.isFinite)
+        actionConsumer(
+            SimulatedGoalAction.SpawnProjectile(
+                entityId,
+                position,
+                velocity,
+                definition
+            )
+        )
+    }
+
+    fun emit(signal: SimulatedSignal) {
+        actionConsumer(
+            SimulatedGoalAction.EmitSignal(
+                entityId,
+                signal
+            )
+        )
     }
 
     fun distanceSquared(

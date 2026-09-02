@@ -12,6 +12,8 @@ import zaqws.zycos.simulated.combat.SimulatedDamage
 import zaqws.zycos.simulated.external.SimulatedExternalAction
 import zaqws.zycos.simulated.external.SimulatedExternalActionQueue
 import zaqws.zycos.simulated.external.SimulatedExternalFrame
+import zaqws.zycos.simulated.goal.SimulatedGoalAction
+import zaqws.zycos.simulated.goal.SimulatedGoalActionBuffer
 import zaqws.zycos.simulated.goal.SimulatedGoalSet
 import zaqws.zycos.simulated.goal.SimulatedGoalSystem
 import zaqws.zycos.simulated.goal.SimulatedLookSystem
@@ -25,6 +27,10 @@ import zaqws.zycos.simulated.physics.SimulatedPhysicsConfig
 import zaqws.zycos.simulated.physics.SimulatedPhysicsSystem
 import zaqws.zycos.simulated.physics.SimulatedSeparationSystem
 import zaqws.zycos.simulated.projectile.SimulatedProjectileManager
+import zaqws.zycos.simulated.projectile.SimulatedProjectileSource
+import zaqws.zycos.simulated.projectile.SimulatedProjectileSpawnData
+import zaqws.zycos.simulated.signal.SimulatedSignalEvent
+import zaqws.zycos.simulated.signal.SimulatedSignalQueue
 import zaqws.zycos.simulated.snapshot.SimulatedEvent
 import zaqws.zycos.simulated.snapshot.SimulatedEventQueue
 import zaqws.zycos.simulated.snapshot.SimulatedFrame
@@ -102,6 +108,14 @@ class SimulatedEngine internal constructor(
             config.maximumQueuedExternalActions
         )
 
+    private val signalQueue =
+        SimulatedSignalQueue(
+            config.maximumQueuedEvents
+        )
+
+    private val goalActionBuffer =
+        SimulatedGoalActionBuffer()
+
     private val pendingExternalFrame =
         AtomicReference(
             SimulatedExternalFrame.EMPTY
@@ -173,7 +187,8 @@ class SimulatedEngine internal constructor(
             entityStore,
             entityQuery,
             ::goalSet,
-            ::externalFrame
+            ::externalFrame,
+            goalActionBuffer::offer
         )
 
     private val pathFollower =
@@ -508,6 +523,22 @@ class SimulatedEngine internal constructor(
         return actions
     }
 
+    fun drainSignals(
+        maximumSignals: Int = Int.MAX_VALUE
+    ): List<SimulatedSignalEvent> {
+        require(maximumSignals >= 0)
+
+        val signals =
+            ArrayList<SimulatedSignalEvent>()
+
+        signalQueue.drainTo(
+            signals,
+            maximumSignals
+        )
+
+        return signals
+    }
+
     override fun exists(
         entityId: SimulatedEntityId
     ): Boolean =
@@ -743,6 +774,7 @@ class SimulatedEngine internal constructor(
             currentExternalFrame
         )
         goalSystem.update(context)
+        applyGoalActions(currentTick)
         navigationSystem.update(context)
         pathFollower.update(context)
         lookSystem.update(context)
@@ -883,6 +915,161 @@ class SimulatedEngine internal constructor(
             damage,
             tick
         )
+
+    private fun applyGoalActions(
+        currentTick: Long
+    ) {
+        goalActionBuffer.forEach { action ->
+            when (action) {
+                is SimulatedGoalAction.SetVelocity -> {
+                    val slot = entityStore.slotOf(action.sourceEntityId)
+
+                    if (slot >= 0) {
+                        entityStore.setVelocity(slot, action.velocity)
+                    }
+                }
+
+                is SimulatedGoalAction.AddVelocity -> {
+                    val slot = entityStore.slotOf(action.sourceEntityId)
+
+                    if (slot >= 0) {
+                        entityStore.addVelocity(slot, action.velocity)
+                    }
+                }
+
+                is SimulatedGoalAction.Teleport -> {
+                    val slot = entityStore.slotOf(action.sourceEntityId)
+
+                    if (slot >= 0) {
+                        entityStore.setPosition(slot, action.position)
+                    }
+                }
+
+                is SimulatedGoalAction.Damage ->
+                    applyGoalDamage(action, currentTick)
+
+                is SimulatedGoalAction.Heal ->
+                    applyGoalHeal(action)
+
+                is SimulatedGoalAction.Knockback ->
+                    applyGoalKnockback(action)
+
+                is SimulatedGoalAction.SpawnProjectile ->
+                    applyGoalProjectile(action, currentTick)
+
+                is SimulatedGoalAction.EmitSignal ->
+                    applyGoalSignal(action, currentTick)
+            }
+        }
+
+        goalActionBuffer.clear()
+    }
+
+    private fun applyGoalDamage(
+        action: SimulatedGoalAction.Damage,
+        currentTick: Long
+    ) {
+        when (val target = action.target) {
+            is SimulatedTarget.Entity ->
+                combatSystem.damage(
+                    SimulatedDamage(
+                        targetEntityId = target.entityId,
+                        amount = action.amount,
+                        sourceEntityId = action.sourceEntityId
+                    ),
+                    currentTick
+                )
+
+            is SimulatedTarget.ExternalActor -> {
+                val actor = currentExternalFrame[target.actorId]
+
+                if (actor?.isDamageable == true) {
+                    externalActionQueue.offer(
+                        SimulatedExternalAction.Damage(
+                            actorId = target.actorId,
+                            amount = action.amount,
+                            sourceEntityId = action.sourceEntityId
+                        )
+                    )
+                }
+            }
+        }
+    }
+
+    private fun applyGoalHeal(
+        action: SimulatedGoalAction.Heal
+    ) {
+        val slot = entityStore.slotOf(action.targetEntityId)
+
+        if (slot >= 0) {
+            entityStore.heal(slot, action.amount)
+        }
+    }
+
+    private fun applyGoalKnockback(
+        action: SimulatedGoalAction.Knockback
+    ) {
+        when (val target = action.target) {
+            is SimulatedTarget.Entity -> {
+                val slot = entityStore.slotOf(target.entityId)
+
+                if (slot >= 0) {
+                    entityStore.addVelocity(slot, action.velocity)
+                }
+            }
+
+            is SimulatedTarget.ExternalActor -> {
+                if (currentExternalFrame[target.actorId]?.isAlive == true) {
+                    externalActionQueue.offer(
+                        SimulatedExternalAction.Knockback(
+                            actorId = target.actorId,
+                            velocity = action.velocity,
+                            sourceEntityId = action.sourceEntityId
+                        )
+                    )
+                }
+            }
+        }
+    }
+
+    private fun applyGoalProjectile(
+        action: SimulatedGoalAction.SpawnProjectile,
+        currentTick: Long
+    ) {
+        val slot = entityStore.slotOf(action.sourceEntityId)
+        if (slot < 0) return
+
+        projectileManager.spawnNow(
+            SimulatedProjectileSpawnData(
+                position = action.position,
+                velocity = action.velocity,
+                source =
+                    SimulatedProjectileSource.Entity(
+                        action.sourceEntityId
+                    ),
+                team = entityStore.team(slot),
+                definition = action.definition
+            ),
+            currentTick
+        )
+    }
+
+    private fun applyGoalSignal(
+        action: SimulatedGoalAction.EmitSignal,
+        currentTick: Long
+    ) {
+        val slot = entityStore.slotOf(action.sourceEntityId)
+        if (slot < 0) return
+
+        signalQueue.offer(
+            SimulatedSignalEvent(
+                tick = currentTick,
+                entityId = action.sourceEntityId,
+                position = entityStore.position(slot),
+                signal = action.signal
+            )
+        )
+    }
 
     private fun processSpawn(
         command: SimulatedCommand.Spawn,
@@ -1213,6 +1400,8 @@ class SimulatedEngine internal constructor(
         eventQueue.clear()
         visualEventQueue.clear()
         externalActionQueue.clear()
+        signalQueue.clear()
+        goalActionBuffer.clear()
         framePublisher.clear()
         projectileManager.close()
 

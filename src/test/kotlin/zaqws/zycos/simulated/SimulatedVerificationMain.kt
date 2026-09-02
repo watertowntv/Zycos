@@ -66,6 +66,9 @@ object SimulatedVerificationMain {
             `external actor frame participates in targeting and combat`()
         }
 
+        SimulatedGoalExtensionTest()
+            .`goal actions control motion area effects projectiles and signals`()
+
         SimulatedProjectileIntegrationTest().apply {
             `projectile handle controls lifecycle and published frame`()
             `high speed projectile stops at first solid column`()

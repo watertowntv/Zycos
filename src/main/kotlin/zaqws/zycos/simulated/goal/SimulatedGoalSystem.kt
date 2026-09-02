@@ -18,7 +18,9 @@ internal class SimulatedGoalSystem(
     private val goalSetProvider:
         (SimulatedEntityId) -> SimulatedGoalSet?,
     private val externalFrameProvider:
-        () -> SimulatedExternalFrame
+        () -> SimulatedExternalFrame,
+    private val actionConsumer:
+        (SimulatedGoalAction) -> Unit
 ) : SimulatedSystem {
     @ConsistentCopyVisibility
     data class ResolvedIntents internal constructor(
@@ -198,7 +200,10 @@ internal class SimulatedGoalSystem(
                     tick,
 
                 currentTarget =
-                    currentTarget
+                    currentTarget,
+
+                actionConsumer =
+                    actionConsumer
             )
 
         var goalIndex = 0
