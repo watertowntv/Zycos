@@ -24,6 +24,10 @@ configurations.named("testRuntimeClasspath") {
     extendsFrom(configurations.named("compileOnly").get())
 }
 
+configurations.named("testCompileClasspath") {
+    extendsFrom(configurations.named("compileOnly").get())
+}
+
 dependencies {
     implementation(kotlin("stdlib"))
     implementation(kotlin("reflect"))

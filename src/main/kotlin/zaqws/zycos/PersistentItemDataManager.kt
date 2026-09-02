@@ -59,6 +59,11 @@ class PersistentItemDataManager<T: PersistentItemDataManager.PersistentItemData>
         plugin.server.pluginManager.registerEvents(listener, plugin)
     }
 
+    fun close() {
+        listener.unregister()
+    }
+
+
     fun initialize(item: ItemStack, factory: (() -> T)? = null): T? {
         if (item.isEmpty) return null
 
@@ -217,7 +222,6 @@ class PersistentItemDataManager<T: PersistentItemDataManager.PersistentItemData>
     private inner class PersistentItemDataListener(
         private val strict: Boolean = false
     ) : Listener {
-
         private fun processSave(item: ItemStack?) {
             if (item == null || item.isEmpty) return
             val data = this@PersistentItemDataManager[item] ?: return
