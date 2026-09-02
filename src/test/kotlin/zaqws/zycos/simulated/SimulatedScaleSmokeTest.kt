@@ -144,6 +144,7 @@ class SimulatedScaleSmokeTest {
                 System.nanoTime() < deadline &&
                 (
                         engine.tick < 15L ||
+                                engine.timingSnapshot().measuredTicks < 15L ||
                                 engine.latestFrame.size < 5_000 ||
                                 engine.projectileManager
                                     .latestFrame.size < 1_000
