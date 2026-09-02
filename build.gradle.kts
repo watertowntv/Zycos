@@ -20,20 +20,21 @@ repositories {
     maven("https://repo.papermc.io/repository/maven-public/")
 }
 
+configurations.named("testRuntimeClasspath") {
+    extendsFrom(configurations.named("compileOnly").get())
+}
+
 dependencies {
     implementation(kotlin("stdlib"))
     implementation(kotlin("reflect"))
 
     testImplementation("org.junit.jupiter:junit-jupiter:6.1.2")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher:6.1.2")
-    testRuntimeOnly("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.11.0")
 
     compileOnly("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.11.0")
     compileOnly("org.jetbrains.kotlinx:kotlinx-serialization-cbor:1.11.0")
 
     paperweight.paperDevBundle("26.2.build.+")
-
-
 }
 
 java {
