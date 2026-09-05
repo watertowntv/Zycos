@@ -16,6 +16,7 @@ internal class SimulatedPhysicsSystem(
     map: SimulatedMap,
     private val config: SimulatedPhysicsConfig =
         SimulatedPhysicsConfig.DEFAULT,
+    private val spatialCellSize: Double = DEFAULT_SPATIAL_CELL_SIZE,
     private val fallModel: SimulatedFallModel =
         MinecraftLikeFallModel(),
     private val damageConsumer:
@@ -25,6 +26,10 @@ internal class SimulatedPhysicsSystem(
             tick: Long
         ) -> Unit
 ) : SimulatedSystem {
+    companion object {
+        private const val DEFAULT_SPATIAL_CELL_SIZE = 4.0
+    }
+
     private val collisionSolver =
         SimulatedCollisionSolver(
             map,
@@ -35,6 +40,11 @@ internal class SimulatedPhysicsSystem(
         Int2DoubleOpenHashMap().apply {
             defaultReturnValue(0.0)
         }
+
+    init {
+        require(spatialCellSize.isFinite())
+        require(spatialCellSize > 0.0)
+    }
 
     override fun update(
         context: SimulatedSystemContext
@@ -185,10 +195,10 @@ internal class SimulatedPhysicsSystem(
         }
 
         val clampedPosition =
-            if (SimulatedSpatialCell.isValidPosition(nextPosition, config.spatialCellSize)) {
+            if (SimulatedSpatialCell.isValidPosition(nextPosition, spatialCellSize)) {
                 nextPosition
             } else {
-                SimulatedSpatialCell.clampPosition(nextPosition, config.spatialCellSize)
+                SimulatedSpatialCell.clampPosition(nextPosition, spatialCellSize)
             }
 
         var finalImpulseX = newImpulseX

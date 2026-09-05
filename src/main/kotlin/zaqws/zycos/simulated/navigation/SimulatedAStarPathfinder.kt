@@ -38,33 +38,48 @@ class SimulatedAStarPathfinder(
         request: SimulatedPathRequest
     ): SimulatedPathResult =
         findPath(
+            map,
+            request,
+            SimulatedPathCancellation.NEVER
+        )
+
+    internal fun findPath(
+        map: SimulatedMap,
+        request: SimulatedPathRequest,
+        cancellation: SimulatedPathCancellation
+    ): SimulatedPathResult =
+        findPath(
             map = map,
             request = request,
             allowedChunkX = null,
-            allowedChunkZ = null
+            allowedChunkZ = null,
+            cancellation = cancellation
         )
 
     internal fun findPathInChunk(
         map: SimulatedMap,
         request: SimulatedPathRequest,
         chunkX: Int,
-        chunkZ: Int
+        chunkZ: Int,
+        cancellation: SimulatedPathCancellation = SimulatedPathCancellation.NEVER
     ): SimulatedPathResult =
         findPath(
             map = map,
             request = request,
             allowedChunkX = chunkX,
-            allowedChunkZ = chunkZ
+            allowedChunkZ = chunkZ,
+            cancellation = cancellation
         )
 
     private fun findPath(
         map: SimulatedMap,
         request: SimulatedPathRequest,
         allowedChunkX: Int?,
-        allowedChunkZ: Int?
+        allowedChunkZ: Int?,
+        cancellation: SimulatedPathCancellation
     ): SimulatedPathResult {
         if (
-            request.cancellation.isCancelled() ||
+            cancellation.isCancelled() ||
             map.revision !=
             request.mapRevision
         ) {
@@ -170,7 +185,7 @@ class SimulatedAStarPathfinder(
 
         while (openNodes.isNotEmpty()) {
             if (
-                request.cancellation.isCancelled() ||
+                cancellation.isCancelled() ||
                 map.revision !=
                 request.mapRevision ||
                 Thread.currentThread().isInterrupted

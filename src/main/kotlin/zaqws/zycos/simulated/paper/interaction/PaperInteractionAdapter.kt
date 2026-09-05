@@ -16,15 +16,15 @@ class PaperInteractionAdapter(
     ClientEntityInteractionHandler
 ) {
     private val lastAttackTicks = ConcurrentHashMap<UUID, Long>()
+    private var lastPruneTick = Long.MIN_VALUE
 
     fun handleAttack(
         player: Player,
         clientEntityId: Int
     ): Boolean {
         check(Bukkit.isPrimaryThread()) { "Interaction must occur on the main thread" }
-        pruneStaleCooldowns()
-
         val currentTick = Bukkit.getCurrentTick().toLong()
+        pruneStaleCooldowns(currentTick)
         val effectiveCooldown = calculateEffectiveCooldown(player, currentTick)
         if (effectiveCooldown < 0.2f) {
             return false
@@ -96,9 +96,8 @@ class PaperInteractionAdapter(
             return false
         }
 
-        pruneStaleCooldowns()
-
         val currentTick = Bukkit.getCurrentTick().toLong()
+        pruneStaleCooldowns(currentTick)
         val effectiveCooldown = calculateEffectiveCooldown(player, currentTick)
         if (effectiveCooldown < 0.2f) {
             return false
@@ -138,12 +137,22 @@ class PaperInteractionAdapter(
         return min(player.attackCooldown, localCooldown)
     }
 
-    private fun pruneStaleCooldowns() {
+    private fun pruneStaleCooldowns(currentTick: Long) {
+        if (
+            lastPruneTick != Long.MIN_VALUE &&
+            currentTick >= lastPruneTick &&
+            currentTick - lastPruneTick < COOLDOWN_PRUNE_INTERVAL_TICKS
+        ) {
+            return
+        }
+
         lastAttackTicks.entries.removeIf { Bukkit.getPlayer(it.key) == null }
+        lastPruneTick = currentTick
     }
 
     companion object {
         private const val DEFAULT_ATTACK_DAMAGE = 1.0
         private const val DEFAULT_ATTACK_SPEED = 4.0
+        private const val COOLDOWN_PRUNE_INTERVAL_TICKS = 20L
     }
 }

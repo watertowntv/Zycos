@@ -29,6 +29,11 @@ import zaqws.zycos.simulated.navigation.hpa.SimulatedHpaPathfinder
 import zaqws.zycos.simulated.physics.SimulatedPhysicsConfig
 import zaqws.zycos.simulated.physics.SimulatedPhysicsSystem
 import zaqws.zycos.simulated.projectile.SimulatedProjectileRemovalReason
+import zaqws.zycos.simulated.projectile.SimulatedProjectileEvent
+import zaqws.zycos.simulated.projectile.SimulatedProjectileManager
+import zaqws.zycos.simulated.projectile.SimulatedProjectileSource
+import zaqws.zycos.simulated.projectile.SimulatedProjectileSpawnData
+import zaqws.zycos.simulated.projectile.SimulatedProjectileDefinition
 import zaqws.zycos.simulated.spatial.SimulatedSpatialCell
 import zaqws.zycos.simulated.spatial.SimulatedSpatialIndex
 import java.util.concurrent.CountDownLatch
@@ -109,6 +114,7 @@ class SimulatedRound4RegressionTest {
         val spawnsPerThread = 50
         val latch = CountDownLatch(threadCount)
         val successfulSpawns = AtomicInteger(0)
+        val rejectedSpawns = AtomicInteger(0)
 
         for (i in 0 until threadCount) {
             Thread {
@@ -119,6 +125,7 @@ class SimulatedRound4RegressionTest {
                         }
                         successfulSpawns.incrementAndGet()
                     } catch (_: IllegalStateException) {
+                        rejectedSpawns.incrementAndGet()
                     }
                 }
                 latch.countDown()
@@ -127,7 +134,7 @@ class SimulatedRound4RegressionTest {
 
         Thread.sleep(5)
         engine.stop()
-        latch.await(5, TimeUnit.SECONDS)
+        assertTrue(latch.await(5, TimeUnit.SECONDS))
 
         assertThrows<IllegalStateException> {
             engine.spawn {
@@ -136,6 +143,8 @@ class SimulatedRound4RegressionTest {
         }
 
         engine.close()
+        assertEquals(threadCount * spawnsPerThread, successfulSpawns.get() + rejectedSpawns.get())
+        assertEquals(0, engine.entityCount)
     }
 
     @Test
@@ -171,7 +180,27 @@ class SimulatedRound4RegressionTest {
     }
 
     @Test
-    fun projectileOutOfBoundsRejectedAndReasonSupported() {
+    fun spatialIndexDoubleMaximumRadiusFromNegativeBoundaryDoesNotOverflow() {
+        val cellSize = 4.0
+        val store = SimulatedEntityStore(16)
+        store.create(position = SimulatedVector3(2.0, 2.0, 2.0))
+        val index = SimulatedSpatialIndex(cellSize)
+        index.rebuild(store)
+        val minimumX = SimulatedSpatialCell.MINIMUM_X.toDouble() * cellSize
+
+        var visited = 0
+        index.forEachNearby(
+            SimulatedVector3(minimumX, 0.0, 0.0),
+            Double.MAX_VALUE
+        ) {
+            visited++
+        }
+
+        assertEquals(1, visited)
+    }
+
+    @Test
+    fun projectileOutOfBoundsRejectedAtIngress() {
         val map = TestSimulatedMapFactory.create()
         val engine = SimulatedEngineBuilder(map).build()
         try {
@@ -189,10 +218,69 @@ class SimulatedRound4RegressionTest {
                 proj.teleport(SimulatedVector3(Double.MAX_VALUE, 0.0, 0.0))
             }
 
-            assertEquals("OUT_OF_BOUNDS", SimulatedProjectileRemovalReason.OUT_OF_BOUNDS.name)
         } finally {
             engine.close()
         }
+    }
+
+    @Test
+    @Timeout(value = 1, unit = TimeUnit.SECONDS)
+    fun extremeProjectileVelocityIsBoundedByMapCollisionTraversal() {
+        val map = TestSimulatedMapFactory.create()
+        val entityStore = SimulatedEntityStore(16)
+        val spatialIndex = SimulatedSpatialIndex(4.0)
+        spatialIndex.rebuild(entityStore)
+        val manager = SimulatedProjectileManager(
+            initialCapacity = 4,
+            maximumQueuedEvents = 16,
+            map = map,
+            entityStore = entityStore,
+            spatialIndex = spatialIndex,
+            commandConsumer = { true },
+            damageConsumer = { _, _ -> 0.0 },
+            externalActionConsumer = {}
+        )
+        val projectileId = manager.spawnNow(
+            SimulatedProjectileSpawnData(
+                position = SimulatedVector3(2.5, 2.0, 2.5),
+                velocity = SimulatedVector3(1.0e100, 0.0, 0.0),
+                source = SimulatedProjectileSource.None,
+                team = zaqws.zycos.simulated.entity.SimulatedTeam.NONE,
+                definition = SimulatedProjectileDefinition(maximumRange = 1.0e100)
+            ),
+            tick = 1L
+        )
+
+        manager.update(2L, zaqws.zycos.simulated.external.SimulatedExternalFrame.EMPTY)
+
+        assertFalse(manager.exists(projectileId))
+        val removal = manager.drainEvents().filterIsInstance<SimulatedProjectileEvent.Remove>().single()
+        assertEquals(SimulatedProjectileRemovalReason.BLOCK_HIT, removal.reason)
+        manager.close()
+    }
+
+    @Test
+    fun publicDataClassAndEnumShapesRemainCompatible() {
+        val physicsConstructorParameters = SimulatedPhysicsConfig::class.java.declaredConstructors
+            .filterNot { it.isSynthetic }
+            .maxOf { it.parameterCount }
+        val requestConstructorParameters = SimulatedPathRequest::class.java.declaredConstructors
+            .filterNot { it.isSynthetic }
+            .maxOf { it.parameterCount }
+
+        assertEquals(9, physicsConstructorParameters)
+        assertEquals(7, requestConstructorParameters)
+        assertEquals(
+            listOf(
+                "REMOVED",
+                "BLOCK_HIT",
+                "ENTITY_HIT",
+                "EXTERNAL_ACTOR_HIT",
+                "MAXIMUM_TICKS",
+                "MAXIMUM_RANGE"
+            ),
+            SimulatedProjectileRemovalReason.entries.map { it.name }
+        )
     }
 
     @Test
@@ -209,7 +297,8 @@ class SimulatedRound4RegressionTest {
         val physicsSystem = SimulatedPhysicsSystem(
             entityStore = entityStore,
             map = map,
-            config = SimulatedPhysicsConfig(spatialCellSize = 4.0),
+            config = SimulatedPhysicsConfig.DEFAULT,
+            spatialCellSize = 4.0,
             damageConsumer = { _, _, _ -> }
         )
 
@@ -236,11 +325,14 @@ class SimulatedRound4RegressionTest {
             target = target,
             traversalProfile = profile,
             maximumDropHeightUnits = 16,
-            mapRevision = map.revision,
-            cancellation = SimulatedPathCancellation { true }
+            mapRevision = map.revision
         )
 
-        val result = pathfinder.findPath(map, cancelledRequest)
+        val result = pathfinder.findPath(
+            map,
+            cancelledRequest,
+            SimulatedPathCancellation { true }
+        )
         assertTrue(result is SimulatedPathResult.Invalid)
 
         val staleRevisionRequest = SimulatedPathRequest(
@@ -272,11 +364,14 @@ class SimulatedRound4RegressionTest {
             target = target,
             traversalProfile = profile,
             maximumDropHeightUnits = 16,
-            mapRevision = map.revision,
-            cancellation = SimulatedPathCancellation { true }
+            mapRevision = map.revision
         )
 
-        val result = pathfinder.findPath(map, cancelledRequest)
+        val result = pathfinder.findPath(
+            map,
+            cancelledRequest,
+            SimulatedPathCancellation { true }
+        )
         assertTrue(result is SimulatedPathResult.Invalid)
     }
 
@@ -297,11 +392,40 @@ class SimulatedRound4RegressionTest {
     @Test
     fun navigationServiceShutdownTimeoutEnforced() {
         val map = TestSimulatedMapFactory.create()
+        val started = CountDownLatch(1)
+        val release = CountDownLatch(1)
         val service = SimulatedNavigationService(
             map = map,
-            workerCount = 2
+            pathfinder = zaqws.zycos.simulated.navigation.SimulatedLocalPathfinder { _, request ->
+                started.countDown()
+                while (release.count > 0L) {
+                    try {
+                        release.await(10, TimeUnit.MILLISECONDS)
+                    } catch (_: InterruptedException) {
+                    }
+                }
+                SimulatedPathResult.Invalid(request.requestId, request.entityId, request.mapRevision)
+            },
+            workerCount = 1
         )
-        service.close()
+        val profile = SimulatedTraversalProfile.from(0.6, 1.8, 1.0)
+        service.requestPath(
+            SimulatedEntityId(1),
+            NavigationNode(0, 0, 16),
+            NavigationNode(5, 5, 16),
+            profile,
+            16
+        )
+        assertTrue(started.await(1, TimeUnit.SECONDS))
+
+        val startedAt = System.nanoTime()
+        try {
+            service.close()
+        } finally {
+            release.countDown()
+        }
+        val elapsedMillis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt)
+        assertTrue(elapsedMillis in 800L..2_000L, "close returned after $elapsedMillis ms")
     }
 
     @Test

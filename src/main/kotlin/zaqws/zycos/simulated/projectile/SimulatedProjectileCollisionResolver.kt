@@ -288,10 +288,24 @@ internal class SimulatedProjectileCollisionResolver(
         }
 
         val difference = end - start
-        val distance = difference.length
+        val interval =
+            segmentInterval(
+                start,
+                difference,
+                map.bounds.minimumX + radius,
+                map.bounds.minimumY + radius,
+                map.bounds.minimumZ + radius,
+                map.bounds.maximumX + 1.0 - radius,
+                map.bounds.maximumY + 1.0 - radius,
+                map.bounds.maximumZ + 1.0 - radius
+            ) ?: return null
+        val intervalStart = interval.first
+        val intervalEnd = interval.second
+        val clippedDifference = difference * (intervalEnd - intervalStart)
+        val distance = clippedDifference.length
 
         if (distance <= SimulatedMath.EPSILON) {
-            return null
+            return if (intervalEnd < 1.0) intervalEnd else null
         }
 
         val steps =
@@ -300,13 +314,14 @@ internal class SimulatedProjectileCollisionResolver(
                         MAXIMUM_BLOCK_SAMPLE_DISTANCE
             ).toInt().coerceAtLeast(1)
 
-        var previousFraction = 0.0
+        var previousFraction = intervalStart
         var step = 1
 
         while (step <= steps) {
             val fraction =
-                step.toDouble() /
-                        steps
+                intervalStart +
+                        (intervalEnd - intervalStart) *
+                        (step.toDouble() / steps)
 
             if (
                 hasBlockCollision(
@@ -348,7 +363,44 @@ internal class SimulatedProjectileCollisionResolver(
             step++
         }
 
-        return null
+        return if (intervalEnd < 1.0) intervalEnd else null
+    }
+
+    private fun segmentInterval(
+        start: SimulatedVector3,
+        difference: SimulatedVector3,
+        minimumX: Double,
+        minimumY: Double,
+        minimumZ: Double,
+        maximumX: Double,
+        maximumY: Double,
+        maximumZ: Double
+    ): Pair<Double, Double>? {
+        var minimumFraction = 0.0
+        var maximumFraction = 1.0
+
+        fun includeAxis(
+            position: Double,
+            movement: Double,
+            minimum: Double,
+            maximum: Double
+        ): Boolean {
+            if (movement == 0.0) {
+                return position in minimum..maximum
+            }
+
+            val first = (minimum - position) / movement
+            val second = (maximum - position) / movement
+            minimumFraction = max(minimumFraction, min(first, second))
+            maximumFraction = min(maximumFraction, max(first, second))
+            return minimumFraction <= maximumFraction
+        }
+
+        if (!includeAxis(start.x, difference.x, minimumX, maximumX)) return null
+        if (!includeAxis(start.y, difference.y, minimumY, maximumY)) return null
+        if (!includeAxis(start.z, difference.z, minimumZ, maximumZ)) return null
+
+        return minimumFraction to maximumFraction
     }
 
     private fun hasBlockCollision(

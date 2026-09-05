@@ -105,102 +105,56 @@ internal class SimulatedSpatialIndex(
                 .coerceIn(SimulatedSpatialCell.MINIMUM_Z.toLong(), SimulatedSpatialCell.MAXIMUM_Z.toLong())
 
         val minimumCellX =
-            (centerCellX - radiusInCells)
-                .coerceIn(SimulatedSpatialCell.MINIMUM_X.toLong(), SimulatedSpatialCell.MAXIMUM_X.toLong())
-                .toInt()
+            lowerBound(
+                centerCellX,
+                radiusInCells,
+                SimulatedSpatialCell.MINIMUM_X
+            )
 
         val maximumCellX =
-            (centerCellX + radiusInCells)
-                .coerceIn(SimulatedSpatialCell.MINIMUM_X.toLong(), SimulatedSpatialCell.MAXIMUM_X.toLong())
-                .toInt()
+            upperBound(
+                centerCellX,
+                radiusInCells,
+                SimulatedSpatialCell.MAXIMUM_X
+            )
 
         val minimumCellY =
-            (centerCellY - radiusInCells)
-                .coerceIn(SimulatedSpatialCell.MINIMUM_Y.toLong(), SimulatedSpatialCell.MAXIMUM_Y.toLong())
-                .toInt()
+            lowerBound(
+                centerCellY,
+                radiusInCells,
+                SimulatedSpatialCell.MINIMUM_Y
+            )
 
         val maximumCellY =
-            (centerCellY + radiusInCells)
-                .coerceIn(SimulatedSpatialCell.MINIMUM_Y.toLong(), SimulatedSpatialCell.MAXIMUM_Y.toLong())
-                .toInt()
+            upperBound(
+                centerCellY,
+                radiusInCells,
+                SimulatedSpatialCell.MAXIMUM_Y
+            )
 
         val minimumCellZ =
-            (centerCellZ - radiusInCells)
-                .coerceIn(SimulatedSpatialCell.MINIMUM_Z.toLong(), SimulatedSpatialCell.MAXIMUM_Z.toLong())
-                .toInt()
+            lowerBound(
+                centerCellZ,
+                radiusInCells,
+                SimulatedSpatialCell.MINIMUM_Z
+            )
 
         val maximumCellZ =
-            (centerCellZ + radiusInCells)
-                .coerceIn(SimulatedSpatialCell.MINIMUM_Z.toLong(), SimulatedSpatialCell.MAXIMUM_Z.toLong())
-                .toInt()
+            upperBound(
+                centerCellZ,
+                radiusInCells,
+                SimulatedSpatialCell.MAXIMUM_Z
+            )
 
-        if (minimumCellX > maximumCellX || minimumCellY > maximumCellY || minimumCellZ > maximumCellZ) {
-            return
-        }
-
-        val spanX = (maximumCellX.toLong() - minimumCellX.toLong() + 1L)
-        val spanY = (maximumCellY.toLong() - minimumCellY.toLong() + 1L)
-        val spanZ = (maximumCellZ.toLong() - minimumCellZ.toLong() + 1L)
-        if (spanX > cells.size || spanZ > cells.size || (spanX * spanY).let { it > cells.size || it * spanZ > cells.size }) {
-            val iterator = cells.long2ObjectEntrySet().fastIterator()
-            while (iterator.hasNext()) {
-                val entry = iterator.next()
-                val packed = entry.longKey
-                val x = SimulatedSpatialCell.unpackX(packed)
-                if (x < minimumCellX || x > maximumCellX) continue
-                val z = SimulatedSpatialCell.unpackZ(packed)
-                if (z < minimumCellZ || z > maximumCellZ) continue
-                val y = SimulatedSpatialCell.unpackY(packed)
-                if (y < minimumCellY || y > maximumCellY) continue
-
-                val entries = entry.value
-                var index = 0
-                while (index < entries.size) {
-                    action(entries.getInt(index))
-                    index++
-                }
-            }
-            return
-        }
-
-        var cellY = minimumCellY
-
-        while (cellY <= maximumCellY) {
-            var cellZ = minimumCellZ
-
-            while (cellZ <= maximumCellZ) {
-                var cellX = minimumCellX
-
-                while (cellX <= maximumCellX) {
-                    val entries =
-                        cells[
-                            SimulatedSpatialCell.pack(
-                                cellX,
-                                cellY,
-                                cellZ
-                            )
-                        ]
-
-                    if (entries != null) {
-                        var index = 0
-
-                        while (index < entries.size) {
-                            action(
-                                entries.getInt(index)
-                            )
-
-                            index++
-                        }
-                    }
-
-                    cellX++
-                }
-
-                cellZ++
-            }
-
-            cellY++
-        }
+        forEachCell(
+            minimumCellX,
+            minimumCellY,
+            minimumCellZ,
+            maximumCellX,
+            maximumCellY,
+            maximumCellZ,
+            action
+        )
     }
 
     inline fun forEachCell(
@@ -235,6 +189,40 @@ internal class SimulatedSpatialIndex(
             maximumCellZ.coerceAtMost(SimulatedSpatialCell.MAXIMUM_Z)
 
         if (startX > endX || startY > endY || startZ > endZ) {
+            return
+        }
+
+        val spanX = endX.toLong() - startX.toLong() + 1L
+        val spanY = endY.toLong() - startY.toLong() + 1L
+        val spanZ = endZ.toLong() - startZ.toLong() + 1L
+
+        if (exceedsActiveCellCount(spanX, spanY, spanZ)) {
+            val iterator = cells.long2ObjectEntrySet().fastIterator()
+
+            while (iterator.hasNext()) {
+                val entry = iterator.next()
+                val packed = entry.longKey
+                val cellX = SimulatedSpatialCell.unpackX(packed)
+                val cellY = SimulatedSpatialCell.unpackY(packed)
+                val cellZ = SimulatedSpatialCell.unpackZ(packed)
+
+                if (
+                    cellX !in startX..endX ||
+                    cellY !in startY..endY ||
+                    cellZ !in startZ..endZ
+                ) {
+                    continue
+                }
+
+                val entries = entry.value
+                var index = 0
+
+                while (index < entries.size) {
+                    action(entries.getInt(index))
+                    index++
+                }
+            }
+
             return
         }
 
@@ -285,6 +273,38 @@ internal class SimulatedSpatialIndex(
             position,
             cellSize
         )
+
+    private fun lowerBound(
+        center: Long,
+        radius: Long,
+        minimum: Int
+    ): Int {
+        val minimumLong = minimum.toLong()
+        return if (radius >= center - minimumLong) minimum else (center - radius).toInt()
+    }
+
+    private fun upperBound(
+        center: Long,
+        radius: Long,
+        maximum: Int
+    ): Int {
+        val maximumLong = maximum.toLong()
+        return if (radius >= maximumLong - center) maximum else (center + radius).toInt()
+    }
+
+    private fun exceedsActiveCellCount(
+        spanX: Long,
+        spanY: Long,
+        spanZ: Long
+    ): Boolean {
+        val activeCellCount = cells.size.toLong()
+        if (activeCellCount == 0L || spanX > activeCellCount) return true
+
+        val spanXY = spanX * spanY
+        if (spanXY > activeCellCount) return true
+
+        return spanZ > activeCellCount / spanXY
+    }
 
     private fun add(
         slot: Int,

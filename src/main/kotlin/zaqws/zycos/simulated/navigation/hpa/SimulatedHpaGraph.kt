@@ -79,8 +79,18 @@ class SimulatedHpaGraph private constructor(
         fun build(
             map: SimulatedMap,
             traversalProfile:
-            SimulatedTraversalProfile,
-            cancellation: SimulatedPathCancellation = SimulatedPathCancellation.NEVER
+            SimulatedTraversalProfile
+        ): SimulatedHpaGraph? =
+            build(
+                map,
+                traversalProfile,
+                SimulatedPathCancellation.NEVER
+            )
+
+        internal fun build(
+            map: SimulatedMap,
+            traversalProfile: SimulatedTraversalProfile,
+            cancellation: SimulatedPathCancellation
         ): SimulatedHpaGraph? {
             if (Thread.currentThread().isInterrupted || cancellation.isCancelled()) {
                 return null

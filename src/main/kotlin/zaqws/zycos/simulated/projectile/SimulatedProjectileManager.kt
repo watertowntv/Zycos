@@ -20,6 +20,7 @@ import java.util.concurrent.ArrayBlockingQueue
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
+import kotlin.math.abs
 
 class SimulatedProjectileManager internal constructor(
     initialCapacity: Int,
@@ -473,26 +474,38 @@ class SimulatedProjectileManager internal constructor(
                 continue
             }
 
+            val velocityScale =
+                maxOf(
+                    abs(state.velocity.x),
+                    abs(state.velocity.y),
+                    abs(state.velocity.z)
+                )
+            val scaledVelocity =
+                if (velocityScale > SimulatedMath.EPSILON) {
+                    state.velocity / velocityScale
+                } else {
+                    SimulatedVector3.ZERO
+                }
+            val scaledVelocityLength = scaledVelocity.length
+            val direction =
+                if (scaledVelocityLength > SimulatedMath.EPSILON) {
+                    scaledVelocity / scaledVelocityLength
+                } else {
+                    SimulatedVector3.ZERO
+                }
             val velocityLength =
-                state.velocity.length
+                velocityScale * scaledVelocityLength
             val distance =
                 minOf(
                     velocityLength,
                     remainingRange
                 )
-            val end =
-                if (
-                    velocityLength >
-                    SimulatedMath.EPSILON
-                ) {
-                    start +
-                            state.velocity *
-                            (distance / velocityLength)
-                } else {
-                    start
-                }
-            val movement =
-                end - start
+            val collisionDistance =
+                minOf(
+                    distance,
+                    maximumDistanceWithinSpatialBounds(start, direction)
+                )
+            val end = start + direction * collisionDistance
             val hit =
                 collisionResolver.find(
                     state.source,
@@ -504,13 +517,14 @@ class SimulatedProjectileManager internal constructor(
                 )
 
             if (hit != null) {
+                val travelledToHit =
+                    collisionDistance * hit.fraction
                 val hitPosition =
-                    start +
-                            movement * hit.fraction
+                    start + direction * travelledToHit
 
                 state.position = hitPosition
                 state.travelledDistance +=
-                    distance * hit.fraction
+                    travelledToHit
 
                 applyHit(
                     state,
@@ -537,11 +551,11 @@ class SimulatedProjectileManager internal constructor(
                 continue
             }
 
-            if (!SimulatedSpatialCell.isValidPosition(end, spatialIndex.cellSize)) {
+            if (collisionDistance < distance) {
                 removeStateAt(
                     slot,
                     tick,
-                    SimulatedProjectileRemovalReason.OUT_OF_BOUNDS
+                    SimulatedProjectileRemovalReason.REMOVED
                 )
                 continue
             }
@@ -802,6 +816,39 @@ class SimulatedProjectileManager internal constructor(
             events.poll()
         }
     }
+
+    private fun maximumDistanceWithinSpatialBounds(
+        start: SimulatedVector3,
+        direction: SimulatedVector3
+    ): Double {
+        if (direction == SimulatedVector3.ZERO) return Double.POSITIVE_INFINITY
+
+        val cellSize = spatialIndex.cellSize
+        val minimumX = SimulatedSpatialCell.MINIMUM_X.toDouble() * cellSize
+        val maximumX = Math.nextDown((SimulatedSpatialCell.MAXIMUM_X.toDouble() + 1.0) * cellSize)
+        val minimumY = SimulatedSpatialCell.MINIMUM_Y.toDouble() * cellSize
+        val maximumY = Math.nextDown((SimulatedSpatialCell.MAXIMUM_Y.toDouble() + 1.0) * cellSize)
+        val minimumZ = SimulatedSpatialCell.MINIMUM_Z.toDouble() * cellSize
+        val maximumZ = Math.nextDown((SimulatedSpatialCell.MAXIMUM_Z.toDouble() + 1.0) * cellSize)
+
+        return minOf(
+            distanceToBoundary(start.x, direction.x, minimumX, maximumX),
+            distanceToBoundary(start.y, direction.y, minimumY, maximumY),
+            distanceToBoundary(start.z, direction.z, minimumZ, maximumZ)
+        ).coerceAtLeast(0.0)
+    }
+
+    private fun distanceToBoundary(
+        position: Double,
+        direction: Double,
+        minimum: Double,
+        maximum: Double
+    ): Double =
+        when {
+            direction > 0.0 -> (maximum - position) / direction
+            direction < 0.0 -> (minimum - position) / direction
+            else -> Double.POSITIVE_INFINITY
+        }
 
     private fun allocateProjectileId():
             SimulatedProjectileId {

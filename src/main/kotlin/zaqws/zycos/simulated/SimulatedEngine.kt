@@ -169,9 +169,7 @@ class SimulatedEngine internal constructor(
             jumpVelocity =
                 config.jumpVelocity,
             entityMass =
-                config.entityMass,
-            spatialCellSize =
-                config.spatialCellSize
+                config.entityMass
         )
 
     private val spatialIndex =
@@ -265,7 +263,8 @@ class SimulatedEngine internal constructor(
         SimulatedPhysicsSystem(
             entityStore,
             map,
-            physicsConfig
+            physicsConfig,
+            config.spatialCellSize
         ) { entityId, damage, tick ->
             combatSystem.damage(
                 SimulatedDamage(
@@ -1113,6 +1112,7 @@ class SimulatedEngine internal constructor(
     ) {
         val slot = entityStore.slotOf(action.sourceEntityId)
         if (slot < 0) return
+        if (!SimulatedSpatialCell.isValidPosition(action.position, config.spatialCellSize)) return
 
         projectileManager.spawnNow(
             SimulatedProjectileSpawnData(

@@ -13,6 +13,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeoutOrNull
 import zaqws.zycos.simulated.entity.SimulatedEntityId
 import zaqws.zycos.simulated.map.SimulatedMap
+import zaqws.zycos.simulated.navigation.hpa.SimulatedHpaPathfinder
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicBoolean
@@ -146,15 +147,23 @@ internal class SimulatedNavigationService(
             return
         }
 
-        val activeRequest = request.copy(
-            cancellation = SimulatedPathCancellation {
-                closed.get() || !isLatestRequest(request) || map.revision != request.mapRevision
+        val cancellation = SimulatedPathCancellation {
+            closed.get() || !isLatestRequest(request) || map.revision != request.mapRevision
+        }
+
+        val result =
+            when (val activePathfinder = pathfinder) {
+                is SimulatedAStarPathfinder ->
+                    activePathfinder.findPath(map, request, cancellation)
+
+                is SimulatedHpaPathfinder ->
+                    activePathfinder.findPath(map, request, cancellation)
+
+                else ->
+                    activePathfinder.findPath(map, request)
             }
-        )
 
-        val result = pathfinder.findPath(map, activeRequest)
-
-        if (map.revision == request.mapRevision && !activeRequest.cancellation.isCancelled()) {
+        if (map.revision == request.mapRevision && !cancellation.isCancelled()) {
             pathCache.put(map, request, result)
         }
 

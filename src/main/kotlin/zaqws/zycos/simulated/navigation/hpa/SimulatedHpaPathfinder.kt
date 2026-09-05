@@ -18,9 +18,20 @@ class SimulatedHpaPathfinder(
     override fun findPath(
         map: SimulatedMap,
         request: SimulatedPathRequest
+    ): SimulatedPathResult =
+        findPath(
+            map,
+            request,
+            SimulatedPathCancellation.NEVER
+        )
+
+    internal fun findPath(
+        map: SimulatedMap,
+        request: SimulatedPathRequest,
+        cancellation: SimulatedPathCancellation
     ): SimulatedPathResult {
         if (
-            request.cancellation.isCancelled() ||
+            cancellation.isCancelled() ||
             map.revision !=
             request.mapRevision
         ) {
@@ -48,10 +59,7 @@ class SimulatedHpaPathfinder(
             startClusterId ==
             targetClusterId
         ) {
-            return localPathfinder.findPath(
-                map,
-                request
-            )
+            return findLocalPathfinderPath(map, request, cancellation)
         }
 
         val graph =
@@ -59,7 +67,7 @@ class SimulatedHpaPathfinder(
                 map,
                 request.traversalProfile,
                 request.mapRevision,
-                request.cancellation
+                cancellation
             ) ?: return invalid(request)
 
         val startCluster =
@@ -85,13 +93,15 @@ class SimulatedHpaPathfinder(
                 graph = graph,
                 request = request,
                 startCluster = startCluster,
-                targetCluster = targetCluster
-            ) ?: return if (request.cancellation.isCancelled() || map.revision != request.mapRevision) invalid(request) else unreachable(request)
+                targetCluster = targetCluster,
+                cancellation = cancellation
+            ) ?: return if (cancellation.isCancelled() || map.revision != request.mapRevision) invalid(request) else unreachable(request)
 
         return refinePath(
             map = map,
             request = request,
-            abstractPath = abstractPath
+            abstractPath = abstractPath,
+            cancellation = cancellation
         )
     }
 
@@ -100,7 +110,8 @@ class SimulatedHpaPathfinder(
         graph: SimulatedHpaGraph,
         request: SimulatedPathRequest,
         startCluster: SimulatedHpaCluster,
-        targetCluster: SimulatedHpaCluster
+        targetCluster: SimulatedHpaCluster,
+        cancellation: SimulatedPathCancellation
     ): AbstractPath? {
         val openNodes =
             PriorityQueue(
@@ -154,7 +165,7 @@ class SimulatedHpaPathfinder(
 
         while (openNodes.isNotEmpty()) {
             if (
-                request.cancellation.isCancelled() ||
+                cancellation.isCancelled() ||
                 map.revision !=
                 request.mapRevision ||
                 Thread.currentThread().isInterrupted
@@ -204,7 +215,8 @@ class SimulatedHpaPathfinder(
                 request = request,
                 currentNode = currentNode,
                 startCluster = startCluster,
-                targetCluster = targetCluster
+                targetCluster = targetCluster,
+                cancellation = cancellation
             ) { neighbor, movementCost ->
                 if (
                     neighbor in
@@ -267,6 +279,7 @@ class SimulatedHpaPathfinder(
         currentNode: AbstractNode,
         startCluster: SimulatedHpaCluster,
         targetCluster: SimulatedHpaCluster,
+        cancellation: SimulatedPathCancellation,
         action: (
             AbstractNode,
             Double
@@ -314,7 +327,8 @@ class SimulatedHpaPathfinder(
                             start =
                                 currentNode.navigationNode,
                             target =
-                                portalNode
+                                portalNode,
+                            cancellation = cancellation
                         ) ?: continue
 
                     action(
@@ -411,7 +425,8 @@ class SimulatedHpaPathfinder(
                             start =
                                 currentNode.navigationNode,
                             target =
-                                otherPortalNode
+                                otherPortalNode,
+                            cancellation = cancellation
                         ) ?: continue
 
                     action(
@@ -440,7 +455,8 @@ class SimulatedHpaPathfinder(
                             start =
                                 currentNode.navigationNode,
                             target =
-                                request.target
+                                request.target,
+                            cancellation = cancellation
                         )
 
                     if (cost != null) {
@@ -460,7 +476,8 @@ class SimulatedHpaPathfinder(
         map: SimulatedMap,
         request: SimulatedPathRequest,
         start: NavigationNode,
-        target: NavigationNode
+        target: NavigationNode,
+        cancellation: SimulatedPathCancellation
     ): Double? {
         if (start == target) {
             return 0.0
@@ -471,7 +488,8 @@ class SimulatedHpaPathfinder(
                 map = map,
                 request = request,
                 start = start,
-                target = target
+                target = target,
+                cancellation = cancellation
             )
 
         return when (result) {
@@ -593,10 +611,11 @@ class SimulatedHpaPathfinder(
     private fun refinePath(
         map: SimulatedMap,
         request: SimulatedPathRequest,
-        abstractPath: AbstractPath
+        abstractPath: AbstractPath,
+        cancellation: SimulatedPathCancellation
     ): SimulatedPathResult {
         if (
-            request.cancellation.isCancelled() ||
+            cancellation.isCancelled() ||
             map.revision !=
             request.mapRevision
         ) {
@@ -615,7 +634,7 @@ class SimulatedHpaPathfinder(
             abstractPath.nodes.size - 1
         ) {
             if (
-                request.cancellation.isCancelled() ||
+                cancellation.isCancelled() ||
                 map.revision !=
                 request.mapRevision ||
                 Thread.currentThread().isInterrupted
@@ -664,14 +683,15 @@ class SimulatedHpaPathfinder(
                     map = map,
                     request = request,
                     start = start,
-                    target = target
+                    target = target,
+                    cancellation = cancellation
                 )
 
             if (
                 localResult !is
                         SimulatedPathResult.Success
             ) {
-                return if (localResult is SimulatedPathResult.Invalid || request.cancellation.isCancelled() || map.revision != request.mapRevision) {
+                return if (localResult is SimulatedPathResult.Invalid || cancellation.isCancelled() || map.revision != request.mapRevision) {
                     invalid(request)
                 } else {
                     unreachable(request)
@@ -742,8 +762,13 @@ class SimulatedHpaPathfinder(
         map: SimulatedMap,
         request: SimulatedPathRequest,
         start: NavigationNode,
-        target: NavigationNode
+        target: NavigationNode,
+        cancellation: SimulatedPathCancellation
     ): SimulatedPathResult {
+        if (cancellation.isCancelled() || map.revision != request.mapRevision) {
+            return invalid(request)
+        }
+
         val localRequest =
             request.copy(
                 start = start,
@@ -772,14 +797,16 @@ class SimulatedHpaPathfinder(
                         map = map,
                         request = localRequest,
                         chunkX = start.chunkX,
-                        chunkZ = start.chunkZ
+                        chunkZ = start.chunkZ,
+                        cancellation = cancellation
                     )
             } else {
-                localPathfinder.findPath(
-                    map,
-                    localRequest
-                )
+                findLocalPathfinderPath(map, localRequest, cancellation)
             }
+
+        if (cancellation.isCancelled() || map.revision != request.mapRevision) {
+            return invalid(localRequest)
+        }
 
         if (
             result !is
@@ -842,6 +869,22 @@ class SimulatedHpaPathfinder(
 
         return result
     }
+
+    private fun findLocalPathfinderPath(
+        map: SimulatedMap,
+        request: SimulatedPathRequest,
+        cancellation: SimulatedPathCancellation
+    ): SimulatedPathResult =
+        when (val pathfinder = localPathfinder) {
+            is SimulatedAStarPathfinder ->
+                pathfinder.findPath(map, request, cancellation)
+
+            is SimulatedHpaPathfinder ->
+                pathfinder.findPath(map, request, cancellation)
+
+            else ->
+                pathfinder.findPath(map, request)
+        }
 
     private fun reconstructAbstractPath(
         previousNodes: Map<
