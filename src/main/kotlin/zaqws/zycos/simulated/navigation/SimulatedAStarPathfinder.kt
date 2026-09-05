@@ -64,6 +64,7 @@ class SimulatedAStarPathfinder(
         allowedChunkZ: Int?
     ): SimulatedPathResult {
         if (
+            request.cancellation.isCancelled() ||
             map.revision !=
             request.mapRevision
         ) {
@@ -169,8 +170,10 @@ class SimulatedAStarPathfinder(
 
         while (openNodes.isNotEmpty()) {
             if (
+                request.cancellation.isCancelled() ||
                 map.revision !=
-                request.mapRevision
+                request.mapRevision ||
+                Thread.currentThread().isInterrupted
             ) {
                 return invalid(request)
             }

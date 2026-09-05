@@ -20,6 +20,7 @@ class SimulatedHpaPathfinder(
         request: SimulatedPathRequest
     ): SimulatedPathResult {
         if (
+            request.cancellation.isCancelled() ||
             map.revision !=
             request.mapRevision
         ) {
@@ -56,7 +57,9 @@ class SimulatedHpaPathfinder(
         val graph =
             cache.graph(
                 map,
-                request.traversalProfile
+                request.traversalProfile,
+                request.mapRevision,
+                request.cancellation
             ) ?: return invalid(request)
 
         val startCluster =
@@ -83,7 +86,7 @@ class SimulatedHpaPathfinder(
                 request = request,
                 startCluster = startCluster,
                 targetCluster = targetCluster
-            ) ?: return unreachable(request)
+            ) ?: return if (request.cancellation.isCancelled() || map.revision != request.mapRevision) invalid(request) else unreachable(request)
 
         return refinePath(
             map = map,
@@ -151,8 +154,10 @@ class SimulatedHpaPathfinder(
 
         while (openNodes.isNotEmpty()) {
             if (
+                request.cancellation.isCancelled() ||
                 map.revision !=
-                request.mapRevision
+                request.mapRevision ||
+                Thread.currentThread().isInterrupted
             ) {
                 return null
             }
@@ -590,6 +595,14 @@ class SimulatedHpaPathfinder(
         request: SimulatedPathRequest,
         abstractPath: AbstractPath
     ): SimulatedPathResult {
+        if (
+            request.cancellation.isCancelled() ||
+            map.revision !=
+            request.mapRevision
+        ) {
+            return invalid(request)
+        }
+
         val finalNodes =
             ArrayList<NavigationNode>()
 
@@ -601,6 +614,15 @@ class SimulatedHpaPathfinder(
             index <
             abstractPath.nodes.size - 1
         ) {
+            if (
+                request.cancellation.isCancelled() ||
+                map.revision !=
+                request.mapRevision ||
+                Thread.currentThread().isInterrupted
+            ) {
+                return invalid(request)
+            }
+
             val start =
                 abstractPath.nodes[index]
                     .navigationNode
@@ -649,9 +671,11 @@ class SimulatedHpaPathfinder(
                 localResult !is
                         SimulatedPathResult.Success
             ) {
-                return unreachable(
-                    request
-                )
+                return if (localResult is SimulatedPathResult.Invalid || request.cancellation.isCancelled() || map.revision != request.mapRevision) {
+                    invalid(request)
+                } else {
+                    unreachable(request)
+                }
             }
 
             appendPath(

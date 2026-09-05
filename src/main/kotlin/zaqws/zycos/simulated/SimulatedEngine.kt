@@ -169,7 +169,9 @@ class SimulatedEngine internal constructor(
             jumpVelocity =
                 config.jumpVelocity,
             entityMass =
-                config.entityMass
+                config.entityMass,
+            spatialCellSize =
+                config.spatialCellSize
         )
 
     private val spatialIndex =
@@ -236,12 +238,17 @@ class SimulatedEngine internal constructor(
             map = map,
             entityStore = entityStore,
             spatialIndex = spatialIndex,
-            commandConsumer =
-                commandQueue::offer,
+            commandConsumer = { command ->
+                enqueueIfOperational {
+                    commandQueue.offer(command)
+                }
+            },
             damageConsumer =
                 ::applyProjectileDamage,
             externalActionConsumer =
-                externalActionQueue::offer
+                externalActionQueue::offer,
+            ingressLock =
+                lifecycleLock
         )
 
     private val combatSystem =
@@ -339,6 +346,18 @@ class SimulatedEngine internal constructor(
         )
     }
 
+    private inline fun enqueueIfOperational(
+        operation: () -> Unit
+    ): Boolean =
+        synchronized(lifecycleLock) {
+            if (!isOperational) {
+                false
+            } else {
+                operation()
+                true
+            }
+        }
+
     fun start(): SimulatedEngine {
         synchronized(lifecycleLock) {
             when (lifecycleState.get()) {
@@ -358,7 +377,7 @@ class SimulatedEngine internal constructor(
 
             lifecycleState.set(LifecycleState.RUNNING)
 
-            simulationJob = simulationScope.launch {
+            val job = simulationScope.launch {
                 try {
                     runSimulationLoop()
                 } catch (exception: CancellationException) {
@@ -376,30 +395,41 @@ class SimulatedEngine internal constructor(
                             lifecycleState.set(LifecycleState.STOPPED)
                         }
                     }
+                    cleanup()
                 }
             }
+            job.invokeOnCompletion {
+                cleanup()
+            }
+            simulationJob = job
         }
 
         return this
     }
 
     fun stop() {
+        val shouldCleanup: Boolean
         synchronized(lifecycleLock) {
             when (lifecycleState.get()) {
                 LifecycleState.CREATED -> {
                     lifecycleState.set(LifecycleState.STOPPED)
-                    projectileManager.close()
+                    shouldCleanup = true
                 }
 
                 LifecycleState.RUNNING -> {
                     lifecycleState.set(LifecycleState.STOPPED)
                     simulationJob?.cancel()
-                    projectileManager.close()
+                    shouldCleanup = false
                 }
 
                 LifecycleState.STOPPED,
-                LifecycleState.CLOSED -> Unit
+                LifecycleState.CLOSED -> {
+                    shouldCleanup = false
+                }
             }
+        }
+        if (shouldCleanup) {
+            cleanup()
         }
     }
 
@@ -414,31 +444,34 @@ class SimulatedEngine internal constructor(
             "Spawn position ${data.position} exceeds spatial bounds for cell size ${config.spatialCellSize}"
         }
 
-        return synchronized(spawnLock) {
+        synchronized(lifecycleLock) {
             check(isOperational) {
                 "SimulatedEngine is not operational (state: ${lifecycleState.get()})"
             }
 
-            val entityId = allocateEntityId()
+            return synchronized(spawnLock) {
+                val entityId = allocateEntityId()
 
-            knownEntityIds.add(entityId.value)
-
-            entityDefinitions[entityId.value] = SimulatedEntityDefinition(
-                hitbox = data.hitbox,
-                attributes = data.attributes
-            )
-
-            commandQueue.offer(
-                SimulatedCommand.Spawn(
-                    entityId,
-                    data
+                val accepted = commandQueue.offer(
+                    SimulatedCommand.Spawn(
+                        entityId,
+                        data
+                    )
                 )
-            )
+                check(accepted) { "Command queue capacity exceeded" }
 
-            SimulatedEntity(
-                entityId,
-                this
-            )
+                knownEntityIds.add(entityId.value)
+
+                entityDefinitions[entityId.value] = SimulatedEntityDefinition(
+                    hitbox = data.hitbox,
+                    attributes = data.attributes
+                )
+
+                SimulatedEntity(
+                    entityId,
+                    this
+                )
+            }
         }
     }
 
@@ -496,28 +529,30 @@ class SimulatedEngine internal constructor(
     fun submitExternalFrame(
         frame: SimulatedExternalFrame
     ): Boolean {
-        check(isOperational) {
-            "SimulatedEngine is not operational (state: ${lifecycleState.get()})"
-        }
-
-        while (true) {
-            val currentFrame =
-                pendingExternalFrame.get()
-
-            if (
-                frame.sequence <
-                currentFrame.sequence
-            ) {
-                return false
+        synchronized(lifecycleLock) {
+            check(isOperational) {
+                "SimulatedEngine is not operational (state: ${lifecycleState.get()})"
             }
 
-            if (
-                pendingExternalFrame.compareAndSet(
-                    currentFrame,
-                    frame
-                )
-            ) {
-                return true
+            while (true) {
+                val currentFrame =
+                    pendingExternalFrame.get()
+
+                if (
+                    frame.sequence <
+                    currentFrame.sequence
+                ) {
+                    return false
+                }
+
+                if (
+                    pendingExternalFrame.compareAndSet(
+                        currentFrame,
+                        frame
+                    )
+                ) {
+                    return true
+                }
             }
         }
     }
@@ -596,14 +631,13 @@ class SimulatedEngine internal constructor(
     override fun remove(
         entityId: SimulatedEntityId
     ) {
-        if (!isOperational) return
-        if (!knownEntityIds.remove(entityId.value)) return
-
-        entityDefinitions.remove(entityId.value)
-
-        commandQueue.offer(
-            SimulatedCommand.Remove(entityId)
-        )
+        enqueueIfOperational {
+            if (!knownEntityIds.remove(entityId.value)) return@enqueueIfOperational
+            entityDefinitions.remove(entityId.value)
+            commandQueue.offer(
+                SimulatedCommand.Remove(entityId)
+            )
+        }
     }
 
     override fun teleport(
@@ -612,111 +646,111 @@ class SimulatedEngine internal constructor(
         yaw: Float?,
         pitch: Float?
     ) {
-        if (!isOperational) return
-        if (!exists(entityId)) return
-
         require(SimulatedSpatialCell.isValidPosition(position, config.spatialCellSize)) {
             "Teleport position $position exceeds spatial bounds for cell size ${config.spatialCellSize}"
         }
 
-        commandQueue.offer(
-            SimulatedCommand.Teleport(
-                entityId,
-                position,
-                yaw,
-                pitch
+        enqueueIfOperational {
+            if (!exists(entityId)) return@enqueueIfOperational
+            commandQueue.offer(
+                SimulatedCommand.Teleport(
+                    entityId,
+                    position,
+                    yaw,
+                    pitch
+                )
             )
-        )
+        }
     }
 
     override fun setVelocity(
         entityId: SimulatedEntityId,
         velocity: SimulatedVector3
     ) {
-        if (!isOperational) return
-        if (!exists(entityId)) return
-
-        commandQueue.offer(
-            SimulatedCommand.SetVelocity(
-                entityId,
-                velocity
+        enqueueIfOperational {
+            if (!exists(entityId)) return@enqueueIfOperational
+            commandQueue.offer(
+                SimulatedCommand.SetVelocity(
+                    entityId,
+                    velocity
+                )
             )
-        )
+        }
     }
 
     override fun addVelocity(
         entityId: SimulatedEntityId,
         velocity: SimulatedVector3
     ) {
-        if (!isOperational) return
-        if (!exists(entityId)) return
-
-        commandQueue.offer(
-            SimulatedCommand.AddVelocity(
-                entityId,
-                velocity
+        enqueueIfOperational {
+            if (!exists(entityId)) return@enqueueIfOperational
+            commandQueue.offer(
+                SimulatedCommand.AddVelocity(
+                    entityId,
+                    velocity
+                )
             )
-        )
+        }
     }
 
     override fun damage(
         entityId: SimulatedEntityId,
         amount: Double
     ) {
-        if (!isOperational) return
-        if (!exists(entityId)) return
-
-        commandQueue.offer(
-            SimulatedCommand.Damage(
-                entityId,
-                amount
+        enqueueIfOperational {
+            if (!exists(entityId)) return@enqueueIfOperational
+            commandQueue.offer(
+                SimulatedCommand.Damage(
+                    entityId,
+                    amount
+                )
             )
-        )
+        }
     }
 
     override fun heal(
         entityId: SimulatedEntityId,
         amount: Double
     ) {
-        if (!isOperational) return
-        if (!exists(entityId)) return
-
-        commandQueue.offer(
-            SimulatedCommand.Heal(
-                entityId,
-                amount
+        enqueueIfOperational {
+            if (!exists(entityId)) return@enqueueIfOperational
+            commandQueue.offer(
+                SimulatedCommand.Heal(
+                    entityId,
+                    amount
+                )
             )
-        )
+        }
     }
 
     override fun setTeam(
         entityId: SimulatedEntityId,
         team: SimulatedTeam
     ) {
-        if (!isOperational) return
-        if (!exists(entityId)) return
-
-        commandQueue.offer(
-            SimulatedCommand.SetTeam(
-                entityId,
-                team
+        enqueueIfOperational {
+            if (!exists(entityId)) return@enqueueIfOperational
+            commandQueue.offer(
+                SimulatedCommand.SetTeam(
+                    entityId,
+                    team
+                )
             )
-        )
+        }
     }
 
     override fun setPresentation(
         entityId: SimulatedEntityId,
         presentationId: SimulatedPresentationId
     ) {
-        if (!isOperational) return
-        if (!exists(entityId)) return
-
-        commandQueue.offer(
-            SimulatedCommand.SetPresentation(
-                entityId,
-                presentationId
+        enqueueIfOperational {
+            if (!exists(entityId)) return@enqueueIfOperational
+            commandQueue.offer(
+                SimulatedCommand.SetPresentation(
+                    entityId,
+                    presentationId
+                )
             )
-        )
+        }
     }
 
     internal fun registerSystem(
@@ -1179,11 +1213,15 @@ class SimulatedEngine internal constructor(
         position: SimulatedVector3,
         yaw: Float? = null,
         pitch: Float? = null
-    ) {
-        if (slot < 0) return
+    ): Boolean {
+        if (slot < 0) return false
+        if (!SimulatedSpatialCell.isValidPosition(position, config.spatialCellSize)) {
+            return false
+        }
 
         entityStore.setPosition(slot, position)
         entityStore.setVelocity(slot, SimulatedVector3.ZERO)
+        entityStore.setMovementVelocity(slot, 0.0, 0.0, 0.0)
         physicsSystem.resetFallDistance(entityId)
         navigationSystem.clearNavigation(entityId)
         pathFollower.clearPath(entityId)
@@ -1195,6 +1233,8 @@ class SimulatedEngine internal constructor(
                 pitch ?: entityStore.pitch(slot)
             )
         }
+
+        return true
     }
 
     private fun processTeleport(

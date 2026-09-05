@@ -6,6 +6,7 @@ import zaqws.zycos.simulated.entity.SimulatedEntityId
 import zaqws.zycos.simulated.entity.SimulatedEntityStore
 import zaqws.zycos.simulated.map.SimulatedMap
 import zaqws.zycos.simulated.math.SimulatedVector3
+import zaqws.zycos.simulated.spatial.SimulatedSpatialCell
 import zaqws.zycos.simulated.system.SimulatedSystem
 import zaqws.zycos.simulated.system.SimulatedSystemContext
 import kotlin.math.max
@@ -59,12 +60,18 @@ internal class SimulatedPhysicsSystem(
             entityStore.hasFlag(
                 slot,
                 SimulatedEntityFlag.REMOVED
-            ) ||
+            )
+        ) {
+            return
+        }
+
+        if (
             entityStore.hasFlag(
                 slot,
                 SimulatedEntityFlag.DEAD
             )
         ) {
+            entityStore.setMovementVelocity(slot, 0.0, 0.0, 0.0)
             return
         }
 
@@ -177,26 +184,49 @@ internal class SimulatedPhysicsSystem(
             entityStore.clearSteeringVelocity(slot)
         }
 
+        val clampedPosition =
+            if (SimulatedSpatialCell.isValidPosition(nextPosition, config.spatialCellSize)) {
+                nextPosition
+            } else {
+                SimulatedSpatialCell.clampPosition(nextPosition, config.spatialCellSize)
+            }
+
+        var finalImpulseX = newImpulseX
+        var finalImpulseY = newImpulseY
+        var finalImpulseZ = newImpulseZ
+
+        if (clampedPosition.x != nextPosition.x) {
+            finalImpulseX = 0.0
+            entityStore.clearSteeringVelocity(slot)
+        }
+        if (clampedPosition.y != nextPosition.y) {
+            finalImpulseY = 0.0
+        }
+        if (clampedPosition.z != nextPosition.z) {
+            finalImpulseZ = 0.0
+            entityStore.clearSteeringVelocity(slot)
+        }
+
         val draggedImpulse =
             applyDrag(
                 SimulatedVector3(
-                    newImpulseX,
-                    newImpulseY,
-                    newImpulseZ
+                    finalImpulseX,
+                    finalImpulseY,
+                    finalImpulseZ
                 ),
                 onGround
             )
 
         entityStore.setMovementVelocity(
             slot,
-            nextPosition.x - position.x,
-            nextPosition.y - position.y,
-            nextPosition.z - position.z
+            clampedPosition.x - position.x,
+            clampedPosition.y - position.y,
+            clampedPosition.z - position.z
         )
 
         entityStore.setPosition(
             slot,
-            nextPosition
+            clampedPosition
         )
 
         entityStore.setVelocity(

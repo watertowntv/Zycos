@@ -14,6 +14,7 @@ import zaqws.zycos.simulated.external.SimulatedExternalFrame
 import zaqws.zycos.simulated.map.SimulatedMap
 import zaqws.zycos.simulated.math.SimulatedMath
 import zaqws.zycos.simulated.math.SimulatedVector3
+import zaqws.zycos.simulated.spatial.SimulatedSpatialCell
 import zaqws.zycos.simulated.spatial.SimulatedSpatialIndex
 import java.util.concurrent.ArrayBlockingQueue
 import java.util.concurrent.ConcurrentHashMap
@@ -26,11 +27,12 @@ class SimulatedProjectileManager internal constructor(
     private val map: SimulatedMap,
     private val entityStore: SimulatedEntityStore,
     private val spatialIndex: SimulatedSpatialIndex,
-    private val commandConsumer: (SimulatedCommand) -> Unit,
+    private val commandConsumer: (SimulatedCommand) -> Boolean,
     private val damageConsumer: (SimulatedDamage, Long) -> Double,
     private val externalActionConsumer: (SimulatedExternalAction) -> Unit,
     private val relationResolver: SimulatedRelationResolver =
-        SimulatedRelationResolver.DEFAULT
+        SimulatedRelationResolver.DEFAULT,
+    private val ingressLock: Any = Any()
 ) : SimulatedProjectileController {
     private data class State(
         val projectileId: SimulatedProjectileId,
@@ -111,36 +113,49 @@ class SimulatedProjectileManager internal constructor(
                 .apply(block)
                 .build()
 
-        return synchronized(spawnLock) {
-            check(!closed.get()) {
-                "SimulatedProjectileManager is closed"
+        require(SimulatedSpatialCell.isValidPosition(data.position, spatialIndex.cellSize)) {
+            "Spawn position ${data.position} exceeds spatial bounds for cell size ${spatialIndex.cellSize}"
+        }
+
+        return synchronized(ingressLock) {
+            synchronized(spawnLock) {
+                check(!closed.get()) {
+                    "SimulatedProjectileManager is closed"
+                }
+
+                val projectileId =
+                    allocateProjectileId()
+
+                knownProjectileIds.add(
+                    projectileId.value
+                )
+
+                definitions[projectileId.value] =
+                    Definition(
+                        source = data.source,
+                        team = data.team,
+                        definition = data.definition
+                    )
+
+                val accepted =
+                    commandConsumer(
+                        SimulatedCommand.SpawnProjectile(
+                            projectileId = projectileId,
+                            data = data
+                        )
+                    )
+
+                if (!accepted) {
+                    knownProjectileIds.remove(projectileId.value)
+                    definitions.remove(projectileId.value)
+                    throw IllegalStateException("SimulatedEngine is not operational")
+                }
+
+                SimulatedProjectile(
+                    projectileId,
+                    this
+                )
             }
-
-            val projectileId =
-                allocateProjectileId()
-
-            knownProjectileIds.add(
-                projectileId.value
-            )
-
-            definitions[projectileId.value] =
-                Definition(
-                    source = data.source,
-                    team = data.team,
-                    definition = data.definition
-                )
-
-            commandConsumer(
-                SimulatedCommand.SpawnProjectile(
-                    projectileId = projectileId,
-                    data = data
-                )
-            )
-
-            SimulatedProjectile(
-                projectileId,
-                this
-            )
         }
     }
 
@@ -200,7 +215,7 @@ class SimulatedProjectileManager internal constructor(
 
         while (index < frame.size) {
             if (
-                frame.projectileIds[index] ==
+                frame.rawProjectileIdAt(index) ==
                 projectileId.value
             ) {
                 return SimulatedProjectileSnapshot(
@@ -210,9 +225,9 @@ class SimulatedProjectileManager internal constructor(
                     source = definition.source,
                     team = definition.team,
                     definition = definition.definition,
-                    ageTicks = frame.ageTicks[index],
+                    ageTicks = frame.ageTicksAt(index),
                     travelledDistance =
-                        frame.travelledDistance[index]
+                        frame.travelledDistanceAt(index)
                 )
             }
 
@@ -249,6 +264,9 @@ class SimulatedProjectileManager internal constructor(
         position: SimulatedVector3
     ) {
         if (!exists(projectileId)) return
+        require(SimulatedSpatialCell.isValidPosition(position, spatialIndex.cellSize)) {
+            "Teleport position $position exceeds spatial bounds for cell size ${spatialIndex.cellSize}"
+        }
 
         commandConsumer(
             SimulatedCommand.TeleportProjectile(
@@ -516,6 +534,15 @@ class SimulatedProjectileManager internal constructor(
                     }
                 )
 
+                continue
+            }
+
+            if (!SimulatedSpatialCell.isValidPosition(end, spatialIndex.cellSize)) {
+                removeStateAt(
+                    slot,
+                    tick,
+                    SimulatedProjectileRemovalReason.OUT_OF_BOUNDS
+                )
                 continue
             }
 

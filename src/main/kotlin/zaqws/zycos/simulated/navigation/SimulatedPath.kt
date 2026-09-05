@@ -6,6 +6,14 @@ import zaqws.zycos.simulated.entity.SimulatedEntityId
 import zaqws.zycos.simulated.map.SimulatedMap
 import zaqws.zycos.simulated.map.SimulatedMapRevision
 
+fun interface SimulatedPathCancellation {
+    fun isCancelled(): Boolean
+
+    companion object {
+        val NEVER = SimulatedPathCancellation { false }
+    }
+}
+
 fun interface SimulatedLocalPathfinder {
     fun findPath(map: SimulatedMap, request: SimulatedPathRequest): SimulatedPathResult
 }
@@ -17,7 +25,8 @@ data class SimulatedPathRequest(
     val target: NavigationNode,
     val traversalProfile: SimulatedTraversalProfile,
     val maximumDropHeightUnits: Int,
-    val mapRevision: SimulatedMapRevision
+    val mapRevision: SimulatedMapRevision,
+    val cancellation: SimulatedPathCancellation = SimulatedPathCancellation.NEVER
 ) {
     init {
         require(requestId > 0L)

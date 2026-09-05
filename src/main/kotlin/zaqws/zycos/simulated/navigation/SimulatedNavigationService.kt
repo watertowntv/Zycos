@@ -10,6 +10,7 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeoutOrNull
 import zaqws.zycos.simulated.entity.SimulatedEntityId
 import zaqws.zycos.simulated.map.SimulatedMap
 import java.util.concurrent.ConcurrentHashMap
@@ -28,6 +29,7 @@ internal class SimulatedNavigationService(
     companion object {
         private const val DEFAULT_MAXIMUM_QUEUED_REQUESTS = 8192
         private const val DEFAULT_CACHE_MAXIMUM_ENTRIES = 4096
+        private const val SHUTDOWN_TIMEOUT_MS = 1000L
     }
 
     private val closed = AtomicBoolean()
@@ -144,9 +146,15 @@ internal class SimulatedNavigationService(
             return
         }
 
-        val result = pathfinder.findPath(map, request)
+        val activeRequest = request.copy(
+            cancellation = SimulatedPathCancellation {
+                closed.get() || !isLatestRequest(request) || map.revision != request.mapRevision
+            }
+        )
 
-        if (map.revision == request.mapRevision) {
+        val result = pathfinder.findPath(map, activeRequest)
+
+        if (map.revision == request.mapRevision && !activeRequest.cancellation.isCancelled()) {
             pathCache.put(map, request, result)
         }
 
@@ -175,7 +183,9 @@ internal class SimulatedNavigationService(
         requests.close()
         workers.forEach { it.cancel() }
         runBlocking {
-            workers.joinAll()
+            withTimeoutOrNull(SHUTDOWN_TIMEOUT_MS) {
+                workers.joinAll()
+            }
         }
         scope.cancel()
         latestRequestIds.clear()

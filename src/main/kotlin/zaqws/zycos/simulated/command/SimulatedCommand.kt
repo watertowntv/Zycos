@@ -84,8 +84,8 @@ internal sealed interface SimulatedCommand {
 internal class SimulatedCommandQueue {
     private val queue = ConcurrentLinkedQueue<SimulatedCommand>()
 
-    fun offer(command: SimulatedCommand) {
-        queue.offer(command)
+    fun offer(command: SimulatedCommand): Boolean {
+        return queue.offer(command)
     }
 
     fun drain(

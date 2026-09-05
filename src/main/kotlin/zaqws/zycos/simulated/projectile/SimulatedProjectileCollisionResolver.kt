@@ -13,8 +13,10 @@ import zaqws.zycos.simulated.map.SimulatedMap
 import zaqws.zycos.simulated.math.SimulatedAABB
 import zaqws.zycos.simulated.math.SimulatedMath
 import zaqws.zycos.simulated.math.SimulatedVector3
+import zaqws.zycos.simulated.spatial.SimulatedSpatialCell
 import zaqws.zycos.simulated.spatial.SimulatedSpatialIndex
 import kotlin.math.ceil
+import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.min
 
@@ -125,38 +127,41 @@ internal class SimulatedProjectileCollisionResolver(
         val maximumHeight =
             spatialIndex.maximumHitboxHeight
 
-        val minimumCell =
-            spatialIndex.cellOf(
-                SimulatedVector3(
-                    min(start.x, end.x) -
-                            radius - maximumHalfWidth,
-                    min(start.y, end.y) -
-                            radius - maximumHeight,
-                    min(start.z, end.z) -
-                            radius - maximumHalfWidth
-                )
-            )
+        val minX = min(start.x, end.x) - radius - maximumHalfWidth
+        val minY = min(start.y, end.y) - radius - maximumHeight
+        val minZ = min(start.z, end.z) - radius - maximumHalfWidth
 
-        val maximumCell =
-            spatialIndex.cellOf(
-                SimulatedVector3(
-                    max(start.x, end.x) +
-                            radius + maximumHalfWidth,
-                    max(start.y, end.y) + radius,
-                    max(start.z, end.z) +
-                            radius + maximumHalfWidth
-                )
-            )
+        val maxX = max(start.x, end.x) + radius + maximumHalfWidth
+        val maxY = max(start.y, end.y) + radius
+        val maxZ = max(start.z, end.z) + radius + maximumHalfWidth
+
+        val minCellX = floor(minX / spatialIndex.cellSize).toLong()
+            .coerceIn(SimulatedSpatialCell.MINIMUM_X.toLong(), SimulatedSpatialCell.MAXIMUM_X.toLong()).toInt()
+        val minCellY = floor(minY / spatialIndex.cellSize).toLong()
+            .coerceIn(SimulatedSpatialCell.MINIMUM_Y.toLong(), SimulatedSpatialCell.MAXIMUM_Y.toLong()).toInt()
+        val minCellZ = floor(minZ / spatialIndex.cellSize).toLong()
+            .coerceIn(SimulatedSpatialCell.MINIMUM_Z.toLong(), SimulatedSpatialCell.MAXIMUM_Z.toLong()).toInt()
+
+        val maxCellX = floor(maxX / spatialIndex.cellSize).toLong()
+            .coerceIn(SimulatedSpatialCell.MINIMUM_X.toLong(), SimulatedSpatialCell.MAXIMUM_X.toLong()).toInt()
+        val maxCellY = floor(maxY / spatialIndex.cellSize).toLong()
+            .coerceIn(SimulatedSpatialCell.MINIMUM_Y.toLong(), SimulatedSpatialCell.MAXIMUM_Y.toLong()).toInt()
+        val maxCellZ = floor(maxZ / spatialIndex.cellSize).toLong()
+            .coerceIn(SimulatedSpatialCell.MINIMUM_Z.toLong(), SimulatedSpatialCell.MAXIMUM_Z.toLong()).toInt()
+
+        if (minCellX > maxCellX || minCellY > maxCellY || minCellZ > maxCellZ) {
+            return initialHit
+        }
 
         var nearestHit = initialHit
 
         spatialIndex.forEachCell(
-            minimumCellX = minimumCell.x,
-            minimumCellY = minimumCell.y,
-            minimumCellZ = minimumCell.z,
-            maximumCellX = maximumCell.x,
-            maximumCellY = maximumCell.y,
-            maximumCellZ = maximumCell.z
+            minimumCellX = minCellX,
+            minimumCellY = minCellY,
+            minimumCellZ = minCellZ,
+            maximumCellX = maxCellX,
+            maximumCellY = maxCellY,
+            maximumCellZ = maxCellZ
         ) { slot ->
             if (
                 entityStore.hasFlag(

@@ -9,7 +9,8 @@ data class SimulatedPhysicsConfig(
     val collisionEpsilon: Double = DEFAULT_COLLISION_EPSILON,
     val groundDetectionDistance: Double = DEFAULT_GROUND_DETECTION_DISTANCE,
     val maximumFallSpeed: Double = DEFAULT_MAXIMUM_FALL_SPEED,
-    val separationStrength: Double = DEFAULT_SEPARATION_STRENGTH
+    val separationStrength: Double = DEFAULT_SEPARATION_STRENGTH,
+    val spatialCellSize: Double = DEFAULT_SPATIAL_CELL_SIZE
 ) {
     companion object {
         const val DEFAULT_GRAVITY_PER_TICK = -0.08
@@ -24,6 +25,7 @@ data class SimulatedPhysicsConfig(
         const val DEFAULT_MAXIMUM_FALL_SPEED = 3.92
 
         const val DEFAULT_SEPARATION_STRENGTH = 0.05
+        const val DEFAULT_SPATIAL_CELL_SIZE = 4.0
 
         val DEFAULT = SimulatedPhysicsConfig()
     }
@@ -54,5 +56,8 @@ data class SimulatedPhysicsConfig(
 
         require(separationStrength.isFinite())
         require(separationStrength >= 0.0)
+
+        require(spatialCellSize.isFinite())
+        require(spatialCellSize >= 0.5)
     }
 }

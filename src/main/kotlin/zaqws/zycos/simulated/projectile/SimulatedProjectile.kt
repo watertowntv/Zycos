@@ -258,7 +258,8 @@ enum class SimulatedProjectileRemovalReason {
     ENTITY_HIT,
     EXTERNAL_ACTOR_HIT,
     MAXIMUM_TICKS,
-    MAXIMUM_RANGE
+    MAXIMUM_RANGE,
+    OUT_OF_BOUNDS
 }
 
 sealed interface SimulatedProjectileEvent {

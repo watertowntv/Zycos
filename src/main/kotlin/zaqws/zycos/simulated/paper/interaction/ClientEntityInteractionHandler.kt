@@ -1,6 +1,9 @@
 package zaqws.zycos.simulated.paper.interaction
 
+import org.bukkit.Bukkit
+import org.bukkit.FluidCollisionMode
 import org.bukkit.entity.Player
+import org.bukkit.util.Vector
 import zaqws.zycos.simulated.SimulatedEngine
 import zaqws.zycos.simulated.entity.SimulatedEntityId
 import zaqws.zycos.simulated.paper.player.PaperPlayerProvider
@@ -28,6 +31,7 @@ class ClientEntityInteractionHandler @JvmOverloads constructor(
         clientEntityId: Int,
         damage: Double
     ): Boolean {
+        check(Bukkit.isPrimaryThread()) { "Interaction must occur on the main thread" }
         require(damage.isFinite())
         require(damage >= 0.0)
 
@@ -70,6 +74,8 @@ class ClientEntityInteractionHandler @JvmOverloads constructor(
         clientEntityId: Int,
         hand: SimulatedInteraction.Hand
     ): Boolean {
+        check(Bukkit.isPrimaryThread()) { "Interaction must occur on the main thread" }
+
         val targetEntityId =
             resolveTarget(
                 clientEntityId
@@ -125,50 +131,46 @@ class ClientEntityInteractionHandler @JvmOverloads constructor(
         val snapshot = engine.snapshot(targetEntityId) ?: return false
 
         val targetPosition = snapshot.position
-        val loc = player.location
+        val hitbox = snapshot.hitbox
         val eyeLoc = player.eyeLocation
 
-        val feetDx = loc.x - targetPosition.x
-        val feetDy = loc.y - targetPosition.y
-        val feetDz = loc.z - targetPosition.z
-        val feetDistanceSquared = feetDx * feetDx + feetDy * feetDy + feetDz * feetDz
+        val minX = targetPosition.x - hitbox.halfWidth
+        val maxX = targetPosition.x + hitbox.halfWidth
+        val minY = targetPosition.y
+        val maxY = targetPosition.y + hitbox.height
+        val minZ = targetPosition.z - hitbox.halfWidth
+        val maxZ = targetPosition.z + hitbox.halfWidth
 
-        val eyeDx = eyeLoc.x - targetPosition.x
-        val eyeDy = eyeLoc.y - targetPosition.y
-        val eyeDz = eyeLoc.z - targetPosition.z
-        val eyeDistanceSquared = eyeDx * eyeDx + eyeDy * eyeDy + eyeDz * eyeDz
+        val closestX = eyeLoc.x.coerceIn(minX, maxX)
+        val closestY = eyeLoc.y.coerceIn(minY, maxY)
+        val closestZ = eyeLoc.z.coerceIn(minZ, maxZ)
 
-        val maximumReachDistanceSquared = maximumReachDistance * maximumReachDistance
+        val dx = eyeLoc.x - closestX
+        val dy = eyeLoc.y - closestY
+        val dz = eyeLoc.z - closestZ
+        val distanceSquared = dx * dx + dy * dy + dz * dz
 
-        val minDistanceSquared =
-            if (feetDistanceSquared < eyeDistanceSquared) {
-                feetDistanceSquared
-            } else {
-                eyeDistanceSquared
-            }
-
-        if (minDistanceSquared > maximumReachDistanceSquared) {
+        if (distanceSquared > maximumReachDistance * maximumReachDistance) {
             return false
         }
 
-        val targetVec = org.bukkit.util.Vector(
-            targetPosition.x,
-            targetPosition.y + snapshot.hitbox.height * 0.5,
-            targetPosition.z
-        )
+        val targetVec = Vector(closestX, closestY, closestZ)
         val direction = targetVec.subtract(eyeLoc.toVector())
         val distance = direction.length()
         if (distance > 1e-4) {
-            direction.normalize()
-            val rayTrace = player.world.rayTraceBlocks(
-                eyeLoc,
-                direction,
-                distance,
-                org.bukkit.FluidCollisionMode.NEVER,
-                true
-            )
-            if (rayTrace != null && rayTrace.hitBlock != null) {
-                return false
+            val maxDistance = (distance - 1e-3).coerceAtLeast(0.0)
+            if (maxDistance > 1e-4) {
+                direction.normalize()
+                val rayTrace = player.world.rayTraceBlocks(
+                    eyeLoc,
+                    direction,
+                    maxDistance,
+                    FluidCollisionMode.NEVER,
+                    true
+                )
+                if (rayTrace != null && rayTrace.hitBlock != null) {
+                    return false
+                }
             }
         }
 

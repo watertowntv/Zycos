@@ -53,17 +53,54 @@ data class SimulatedSpatialCell(
                 cell.z
             )
 
+        internal fun unpackX(packed: Long): Int {
+            val rawX = (packed ushr X_SHIFT).toInt()
+            return (rawX shl 8) shr 8
+        }
+
+        internal fun unpackY(packed: Long): Int {
+            val rawY = (packed and Y_MASK).toInt()
+            return (rawY shl 16) shr 16
+        }
+
+        internal fun unpackZ(packed: Long): Int {
+            val rawZ = ((packed ushr Y_BITS) and Z_MASK).toInt()
+            return (rawZ shl 8) shr 8
+        }
+
         fun isValidPosition(
             position: SimulatedVector3,
             cellSize: Double
         ): Boolean {
             if (!position.isFinite || !cellSize.isFinite() || cellSize <= 0.0) return false
-            val cellX = SimulatedMath.floorToInt(position.x / cellSize)
-            val cellY = SimulatedMath.floorToInt(position.y / cellSize)
-            val cellZ = SimulatedMath.floorToInt(position.z / cellSize)
-            return cellX in MINIMUM_X..MAXIMUM_X &&
-                    cellY in MINIMUM_Y..MAXIMUM_Y &&
-                    cellZ in MINIMUM_Z..MAXIMUM_Z
+            val minX = MINIMUM_X.toDouble() * cellSize
+            val maxX = (MAXIMUM_X.toDouble() + 1.0) * cellSize
+            val minY = MINIMUM_Y.toDouble() * cellSize
+            val maxY = (MAXIMUM_Y.toDouble() + 1.0) * cellSize
+            val minZ = MINIMUM_Z.toDouble() * cellSize
+            val maxZ = (MAXIMUM_Z.toDouble() + 1.0) * cellSize
+
+            return position.x >= minX && position.x < maxX &&
+                    position.y >= minY && position.y < maxY &&
+                    position.z >= minZ && position.z < maxZ
+        }
+
+        fun clampPosition(
+            position: SimulatedVector3,
+            cellSize: Double
+        ): SimulatedVector3 {
+            val minX = MINIMUM_X.toDouble() * cellSize
+            val maxX = Math.nextDown((MAXIMUM_X.toDouble() + 1.0) * cellSize)
+            val minY = MINIMUM_Y.toDouble() * cellSize
+            val maxY = Math.nextDown((MAXIMUM_Y.toDouble() + 1.0) * cellSize)
+            val minZ = MINIMUM_Z.toDouble() * cellSize
+            val maxZ = Math.nextDown((MAXIMUM_Z.toDouble() + 1.0) * cellSize)
+
+            return SimulatedVector3(
+                position.x.coerceIn(minX, maxX),
+                position.y.coerceIn(minY, maxY),
+                position.z.coerceIn(minZ, maxZ)
+            )
         }
 
         internal const val X_BITS = 24

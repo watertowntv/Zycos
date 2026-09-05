@@ -7,6 +7,7 @@ import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap
 import zaqws.zycos.simulated.map.SimulatedMap
 import zaqws.zycos.simulated.map.SimulatedMapRevision
 import zaqws.zycos.simulated.navigation.NavigationNode
+import zaqws.zycos.simulated.navigation.SimulatedPathCancellation
 import zaqws.zycos.simulated.navigation.SimulatedTraversalProfile
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -75,22 +76,18 @@ class SimulatedHpaGraph private constructor(
     }
 
     companion object {
-        private const val MAXIMUM_BUILD_RETRIES = 3
-
         fun build(
             map: SimulatedMap,
             traversalProfile:
-            SimulatedTraversalProfile
+            SimulatedTraversalProfile,
+            cancellation: SimulatedPathCancellation = SimulatedPathCancellation.NEVER
         ): SimulatedHpaGraph? {
-            var attempt = 0
-            while (attempt < MAXIMUM_BUILD_RETRIES) {
-                if (Thread.currentThread().isInterrupted) {
-                    return null
-                }
-                attempt++
+            if (Thread.currentThread().isInterrupted || cancellation.isCancelled()) {
+                return null
+            }
 
-                val expectedMapRevision =
-                    map.revision
+            val expectedMapRevision =
+                map.revision
 
             val clusterPortals =
                 Long2ObjectOpenHashMap<
@@ -114,6 +111,10 @@ class SimulatedHpaGraph private constructor(
                 chunkZ <=
                 map.bounds.maximumChunkZ
             ) {
+                if (Thread.currentThread().isInterrupted || cancellation.isCancelled() || map.revision != expectedMapRevision) {
+                    return null
+                }
+
                 var chunkX =
                     map.bounds.minimumChunkX
 
@@ -121,6 +122,10 @@ class SimulatedHpaGraph private constructor(
                     chunkX <=
                     map.bounds.maximumChunkX
                 ) {
+                    if (Thread.currentThread().isInterrupted || cancellation.isCancelled() || map.revision != expectedMapRevision) {
+                        return null
+                    }
+
                     if (
                         map.walkSurfaceChunk(
                             chunkX,
@@ -186,6 +191,10 @@ class SimulatedHpaGraph private constructor(
                 chunkZ <=
                 map.bounds.maximumChunkZ
             ) {
+                if (Thread.currentThread().isInterrupted || cancellation.isCancelled() || map.revision != expectedMapRevision) {
+                    return null
+                }
+
                 var chunkX =
                     map.bounds.minimumChunkX
 
@@ -193,6 +202,10 @@ class SimulatedHpaGraph private constructor(
                     chunkX <=
                     map.bounds.maximumChunkX
                 ) {
+                    if (Thread.currentThread().isInterrupted || cancellation.isCancelled() || map.revision != expectedMapRevision) {
+                        return null
+                    }
+
                     val chunkRevision =
                         map.chunkRevision(
                             chunkX,
@@ -239,7 +252,9 @@ class SimulatedHpaGraph private constructor(
 
             if (
                 map.revision ==
-                expectedMapRevision
+                expectedMapRevision &&
+                !cancellation.isCancelled() &&
+                !Thread.currentThread().isInterrupted
             ) {
                 return SimulatedHpaGraph(
                     mapRevision =
@@ -255,10 +270,9 @@ class SimulatedHpaGraph private constructor(
                         portals
                 )
             }
-        }
 
-        return null
-    }
+            return null
+        }
 
         internal fun clusterId(
             chunkX: Int,
