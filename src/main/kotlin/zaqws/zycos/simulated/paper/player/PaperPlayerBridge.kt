@@ -2,20 +2,37 @@
 
 package zaqws.zycos.simulated.paper.player
 
+import org.bukkit.World
 import org.bukkit.plugin.java.JavaPlugin
 import org.bukkit.scheduler.BukkitTask
 import zaqws.zycos.simulated.SimulatedEngine
 import zaqws.zycos.simulated.external.SimulatedExternalFrame
 import java.util.concurrent.atomic.AtomicBoolean
 
-class PaperPlayerBridge(
+class PaperPlayerBridge @JvmOverloads constructor(
     private val plugin: JavaPlugin,
     private val engine: SimulatedEngine,
     val playerProvider: PaperPlayerProvider = PaperPlayerProvider(plugin),
     private val actionHandler: PaperExternalActionHandler =
-        PaperExternalActionHandler(plugin, playerProvider),
+        PaperExternalActionHandler(plugin, playerProvider, playerProvider.world),
     val maximumActionsPerTick: Int = DEFAULT_MAXIMUM_ACTIONS_PER_TICK
 ) : AutoCloseable {
+    @JvmOverloads
+    constructor(
+        plugin: JavaPlugin,
+        engine: SimulatedEngine,
+        world: World?,
+        teamResolver: PaperPlayerTeamResolver = PaperPlayerTeamResolver.NONE,
+        maximumActionsPerTick: Int = DEFAULT_MAXIMUM_ACTIONS_PER_TICK
+    ) : this(
+        plugin = plugin,
+        engine = engine,
+        playerProvider = PaperPlayerProvider(plugin, teamResolver, world),
+        maximumActionsPerTick = maximumActionsPerTick
+    )
+
+    val world: World?
+        get() = playerProvider.world
     companion object {
         const val DEFAULT_MAXIMUM_ACTIONS_PER_TICK = 8_192
     }

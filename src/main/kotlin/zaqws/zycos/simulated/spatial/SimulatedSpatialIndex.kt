@@ -96,22 +96,32 @@ internal class SimulatedSpatialIndex(
             )
 
         val minimumCellX =
-            centerCell.x - radiusInCells
+            (centerCell.x - radiusInCells)
+                .coerceAtLeast(SimulatedSpatialCell.MINIMUM_X)
 
         val maximumCellX =
-            centerCell.x + radiusInCells
+            (centerCell.x + radiusInCells)
+                .coerceAtMost(SimulatedSpatialCell.MAXIMUM_X)
 
         val minimumCellY =
-            centerCell.y - radiusInCells
+            (centerCell.y - radiusInCells)
+                .coerceAtLeast(SimulatedSpatialCell.MINIMUM_Y)
 
         val maximumCellY =
-            centerCell.y + radiusInCells
+            (centerCell.y + radiusInCells)
+                .coerceAtMost(SimulatedSpatialCell.MAXIMUM_Y)
 
         val minimumCellZ =
-            centerCell.z - radiusInCells
+            (centerCell.z - radiusInCells)
+                .coerceAtLeast(SimulatedSpatialCell.MINIMUM_Z)
 
         val maximumCellZ =
-            centerCell.z + radiusInCells
+            (centerCell.z + radiusInCells)
+                .coerceAtMost(SimulatedSpatialCell.MAXIMUM_Z)
+
+        if (minimumCellX > maximumCellX || minimumCellY > maximumCellY || minimumCellZ > maximumCellZ) {
+            return
+        }
 
         var cellY = minimumCellY
 
@@ -166,15 +176,37 @@ internal class SimulatedSpatialIndex(
         require(minimumCellY <= maximumCellY)
         require(minimumCellZ <= maximumCellZ)
 
-        var cellY = minimumCellY
+        val startX =
+            minimumCellX.coerceAtLeast(SimulatedSpatialCell.MINIMUM_X)
 
-        while (cellY <= maximumCellY) {
-            var cellZ = minimumCellZ
+        val endX =
+            maximumCellX.coerceAtMost(SimulatedSpatialCell.MAXIMUM_X)
 
-            while (cellZ <= maximumCellZ) {
-                var cellX = minimumCellX
+        val startY =
+            minimumCellY.coerceAtLeast(SimulatedSpatialCell.MINIMUM_Y)
 
-                while (cellX <= maximumCellX) {
+        val endY =
+            maximumCellY.coerceAtMost(SimulatedSpatialCell.MAXIMUM_Y)
+
+        val startZ =
+            minimumCellZ.coerceAtLeast(SimulatedSpatialCell.MINIMUM_Z)
+
+        val endZ =
+            maximumCellZ.coerceAtMost(SimulatedSpatialCell.MAXIMUM_Z)
+
+        if (startX > endX || startY > endY || startZ > endZ) {
+            return
+        }
+
+        var cellY = startY
+
+        while (cellY <= endY) {
+            var cellZ = startZ
+
+            while (cellZ <= endZ) {
+                var cellX = startX
+
+                while (cellX <= endX) {
                     val entries =
                         cells[
                             SimulatedSpatialCell.pack(

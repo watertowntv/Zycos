@@ -53,9 +53,9 @@ data class SimulatedSpatialCell(
                 cell.z
             )
 
-        private const val X_BITS = 22
-        private const val Y_BITS = 20
-        private const val Z_BITS = 22
+        internal const val X_BITS = 25
+        internal const val Y_BITS = 14
+        internal const val Z_BITS = 25
 
         private const val Y_MASK =
             (1L shl Y_BITS) - 1L
@@ -69,22 +69,22 @@ data class SimulatedSpatialCell(
         private const val X_SHIFT =
             Y_BITS + Z_BITS
 
-        private const val MINIMUM_X =
+        internal const val MINIMUM_X =
             -(1 shl (X_BITS - 1))
 
-        private const val MAXIMUM_X =
+        internal const val MAXIMUM_X =
             (1 shl (X_BITS - 1)) - 1
 
-        private const val MINIMUM_Y =
+        internal const val MINIMUM_Y =
             -(1 shl (Y_BITS - 1))
 
-        private const val MAXIMUM_Y =
+        internal const val MAXIMUM_Y =
             (1 shl (Y_BITS - 1)) - 1
 
-        private const val MINIMUM_Z =
+        internal const val MINIMUM_Z =
             MINIMUM_X
 
-        private const val MAXIMUM_Z =
+        internal const val MAXIMUM_Z =
             MAXIMUM_X
     }
 }

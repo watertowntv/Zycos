@@ -7,7 +7,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import zaqws.zycos.simulated.entity.SimulatedEntityId
 import zaqws.zycos.simulated.map.SimulatedMap
 import java.util.concurrent.ConcurrentHashMap
@@ -38,18 +40,18 @@ internal class SimulatedNavigationService(
         SupervisorJob() + dispatcher + CoroutineName("Simulated-Navigation")
     )
 
+    private val workers = List(workerCount) {
+        scope.launch {
+            for (request in requests) {
+                processRequest(request)
+            }
+        }
+    }
+
     init {
         require(workerCount > 0)
         require(maximumQueuedRequests > 0)
         require(cacheMaximumEntries > 0)
-
-        repeat(workerCount) {
-            scope.launch {
-                for (request in requests) {
-                    processRequest(request)
-                }
-            }
-        }
     }
 
     fun requestPath(
@@ -171,6 +173,10 @@ internal class SimulatedNavigationService(
         if (!closed.compareAndSet(false, true)) return
 
         requests.close()
+        workers.forEach { it.cancel() }
+        runBlocking {
+            workers.joinAll()
+        }
         scope.cancel()
         latestRequestIds.clear()
         results.clear()

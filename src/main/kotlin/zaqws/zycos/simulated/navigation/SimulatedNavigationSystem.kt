@@ -138,7 +138,7 @@ internal class SimulatedNavigationSystem(
         val targetPosition = when (movementIntent) {
             is SimulatedIntent.MoveTo -> {
                 if (
-                    position.horizontalDistanceSquared(movementIntent.position) <=
+                    position.distanceSquared(movementIntent.position) <=
                     movementIntent.stoppingDistance * movementIntent.stoppingDistance
                 ) {
                     clearNavigation(slot, entityId)
@@ -167,8 +167,18 @@ internal class SimulatedNavigationSystem(
         }
 
         val targetChanged = state.requestedTarget?.let {
-            it.horizontalDistanceSquared(targetNode).toDouble() >
-                    config.repathDistance * config.repathDistance
+            val horizontalDistanceSq =
+                it.horizontalDistanceSquared(targetNode).toDouble()
+            val verticalDifferenceBlocks =
+                kotlin.math.abs(
+                    it.verticalDifferenceUnits(targetNode)
+                ).toDouble() /
+                        zaqws.zycos.simulated.map.SimulatedMapConfig.UNITS_PER_BLOCK
+
+            horizontalDistanceSq >
+                    config.repathDistance * config.repathDistance ||
+                    verticalDifferenceBlocks >
+                    config.repathDistance
         } ?: true
 
         val pathInvalid =
@@ -269,16 +279,23 @@ internal class SimulatedNavigationSystem(
         return NavigationNode(worldX, worldZ, surface.floorHeightUnits)
     }
 
+    fun clearNavigation(entityId: SimulatedEntityId) {
+        val slot = entityStore.slotOf(entityId)
+        if (slot >= 0) {
+            clearNavigation(slot, entityId)
+        } else {
+            navigationService.cancel(entityId)
+            pathFollower.clearPath(entityId)
+            navigationStates.remove(entityId.value)
+        }
+    }
+
     private fun clearNavigation(slot: Int, entityId: SimulatedEntityId) {
         navigationService.cancel(entityId)
         pathFollower.clearPath(entityId)
         navigationStates.remove(entityId.value)
 
-        val velocity = entityStore.velocity(slot)
-
-        if (velocity.x != 0.0 || velocity.z != 0.0) {
-            entityStore.setVelocity(slot, SimulatedVector3(0.0, velocity.y, 0.0))
-        }
+        entityStore.clearSteeringVelocity(slot)
     }
 
     private fun canNavigate(slot: Int) =

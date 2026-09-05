@@ -557,69 +557,67 @@ internal class SimulatedCombatSystem(
             )
         )
 
-        externalActionConsumer(
-            SimulatedExternalAction.Damage(
-                actorId = targetActorId,
-                amount =
-                    entityStore.attackDamage(
-                        attackerSlot
-                    ),
-                sourceEntityId =
-                    attackerEntityId
-            )
-        )
-
         val knockbackStrength =
             entityStore.knockbackStrength(
                 attackerSlot
             )
 
-        if (knockbackStrength > 0.0) {
-            val differenceX =
-                target.position.x -
-                        attackerPosition.x
+        val knockbackVelocity =
+            if (knockbackStrength > 0.0) {
+                val differenceX =
+                    target.position.x -
+                            attackerPosition.x
 
-            val differenceZ =
-                target.position.z -
-                        attackerPosition.z
+                val differenceZ =
+                    target.position.z -
+                            attackerPosition.z
 
-            val horizontalLengthSquared =
-                differenceX * differenceX +
-                        differenceZ * differenceZ
+                val horizontalLengthSquared =
+                    differenceX * differenceX +
+                            differenceZ * differenceZ
 
-            if (
-                horizontalLengthSquared >
-                SimulatedMath.EPSILON_SQUARED
-            ) {
-                val inverseHorizontalLength =
-                    1.0 /
-                            sqrt(
-                                horizontalLengthSquared
-                            )
+                if (
+                    horizontalLengthSquared >
+                    SimulatedMath.EPSILON_SQUARED
+                ) {
+                    val inverseHorizontalLength =
+                        1.0 /
+                                sqrt(
+                                    horizontalLengthSquared
+                                )
 
-                externalActionConsumer(
-                    SimulatedExternalAction.Knockback(
-                        actorId = targetActorId,
-                        velocity =
-                            SimulatedVector3(
-                                x =
-                                    differenceX *
-                                            inverseHorizontalLength *
-                                            knockbackStrength,
-                                y =
-                                    knockbackStrength *
-                                            VERTICAL_KNOCKBACK_MULTIPLIER,
-                                z =
-                                    differenceZ *
-                                            inverseHorizontalLength *
-                                            knockbackStrength
-                            ),
-                        sourceEntityId =
-                            attackerEntityId
+                    SimulatedVector3(
+                        x =
+                            differenceX *
+                                    inverseHorizontalLength *
+                                    knockbackStrength,
+                        y =
+                            knockbackStrength *
+                                    VERTICAL_KNOCKBACK_MULTIPLIER,
+                        z =
+                            differenceZ *
+                                    inverseHorizontalLength *
+                                    knockbackStrength
                     )
-                )
+                } else {
+                    null
+                }
+            } else {
+                null
             }
-        }
+
+        externalActionConsumer(
+            SimulatedExternalAction.Combined(
+                actorId = targetActorId,
+                damage =
+                    entityStore.attackDamage(
+                        attackerSlot
+                    ),
+                knockbackVelocity = knockbackVelocity,
+                sourceEntityId =
+                    attackerEntityId
+            )
+        )
 
         return true
     }

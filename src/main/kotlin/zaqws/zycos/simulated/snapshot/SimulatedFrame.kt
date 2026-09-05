@@ -11,84 +11,132 @@ import java.util.concurrent.atomic.AtomicReference
 
 class SimulatedFrame internal constructor(
     val tick: Long,
-    val entityIds: IntArray,
-    val positionX: DoubleArray,
-    val positionY: DoubleArray,
-    val positionZ: DoubleArray,
-    val velocityX: DoubleArray,
-    val velocityY: DoubleArray,
-    val velocityZ: DoubleArray,
-    val yaw: FloatArray,
-    val pitch: FloatArray,
-    val health: DoubleArray,
-    val maximumHealth: DoubleArray,
-    val hitboxWidth: DoubleArray,
-    val hitboxHeight: DoubleArray,
-    val teams: IntArray,
-    val presentationIds: IntArray,
-    val flags: LongArray
+    internal val rawEntityIds: IntArray,
+    internal val rawPositionX: DoubleArray,
+    internal val rawPositionY: DoubleArray,
+    internal val rawPositionZ: DoubleArray,
+    internal val rawVelocityX: DoubleArray,
+    internal val rawVelocityY: DoubleArray,
+    internal val rawVelocityZ: DoubleArray,
+    internal val rawYaw: FloatArray,
+    internal val rawPitch: FloatArray,
+    internal val rawHealth: DoubleArray,
+    internal val rawMaximumHealth: DoubleArray,
+    internal val rawHitboxWidth: DoubleArray,
+    internal val rawHitboxHeight: DoubleArray,
+    internal val rawTeams: IntArray,
+    internal val rawPresentationIds: IntArray,
+    internal val rawFlags: LongArray
 ) {
     companion object {
         val EMPTY = SimulatedFrame(
             tick = 0L,
-            entityIds = IntArray(0),
-            positionX = DoubleArray(0),
-            positionY = DoubleArray(0),
-            positionZ = DoubleArray(0),
-            velocityX = DoubleArray(0),
-            velocityY = DoubleArray(0),
-            velocityZ = DoubleArray(0),
-            yaw = FloatArray(0),
-            pitch = FloatArray(0),
-            health = DoubleArray(0),
-            maximumHealth = DoubleArray(0),
-            hitboxWidth = DoubleArray(0),
-            hitboxHeight = DoubleArray(0),
-            teams = IntArray(0),
-            presentationIds = IntArray(0),
-            flags = LongArray(0)
+            rawEntityIds = IntArray(0),
+            rawPositionX = DoubleArray(0),
+            rawPositionY = DoubleArray(0),
+            rawPositionZ = DoubleArray(0),
+            rawVelocityX = DoubleArray(0),
+            rawVelocityY = DoubleArray(0),
+            rawVelocityZ = DoubleArray(0),
+            rawYaw = FloatArray(0),
+            rawPitch = FloatArray(0),
+            rawHealth = DoubleArray(0),
+            rawMaximumHealth = DoubleArray(0),
+            rawHitboxWidth = DoubleArray(0),
+            rawHitboxHeight = DoubleArray(0),
+            rawTeams = IntArray(0),
+            rawPresentationIds = IntArray(0),
+            rawFlags = LongArray(0)
         )
     }
 
     val size: Int
-        get() = entityIds.size
+        get() = rawEntityIds.size
+
+    val entityIds: IntArray
+        get() = rawEntityIds.clone()
+
+    val positionX: DoubleArray
+        get() = rawPositionX.clone()
+
+    val positionY: DoubleArray
+        get() = rawPositionY.clone()
+
+    val positionZ: DoubleArray
+        get() = rawPositionZ.clone()
+
+    val velocityX: DoubleArray
+        get() = rawVelocityX.clone()
+
+    val velocityY: DoubleArray
+        get() = rawVelocityY.clone()
+
+    val velocityZ: DoubleArray
+        get() = rawVelocityZ.clone()
+
+    val yaw: FloatArray
+        get() = rawYaw.clone()
+
+    val pitch: FloatArray
+        get() = rawPitch.clone()
+
+    val health: DoubleArray
+        get() = rawHealth.clone()
+
+    val maximumHealth: DoubleArray
+        get() = rawMaximumHealth.clone()
+
+    val hitboxWidth: DoubleArray
+        get() = rawHitboxWidth.clone()
+
+    val hitboxHeight: DoubleArray
+        get() = rawHitboxHeight.clone()
+
+    val teams: IntArray
+        get() = rawTeams.clone()
+
+    val presentationIds: IntArray
+        get() = rawPresentationIds.clone()
+
+    val flags: LongArray
+        get() = rawFlags.clone()
 
     init {
-        require(positionX.size == size)
-        require(positionY.size == size)
-        require(positionZ.size == size)
+        require(rawPositionX.size == size)
+        require(rawPositionY.size == size)
+        require(rawPositionZ.size == size)
 
-        require(velocityX.size == size)
-        require(velocityY.size == size)
-        require(velocityZ.size == size)
+        require(rawVelocityX.size == size)
+        require(rawVelocityY.size == size)
+        require(rawVelocityZ.size == size)
 
-        require(yaw.size == size)
-        require(pitch.size == size)
+        require(rawYaw.size == size)
+        require(rawPitch.size == size)
 
-        require(health.size == size)
-        require(maximumHealth.size == size)
+        require(rawHealth.size == size)
+        require(rawMaximumHealth.size == size)
 
-        require(hitboxWidth.size == size)
-        require(hitboxHeight.size == size)
+        require(rawHitboxWidth.size == size)
+        require(rawHitboxHeight.size == size)
 
-        require(teams.size == size)
-        require(presentationIds.size == size)
-        require(flags.size == size)
+        require(rawTeams.size == size)
+        require(rawPresentationIds.size == size)
+        require(rawFlags.size == size)
     }
 
     fun entityIdAt(index: Int): SimulatedEntityId {
         requireValidIndex(index)
 
-        return SimulatedEntityId(entityIds[index])
+        return SimulatedEntityId(rawEntityIds[index])
     }
 
     fun positionAt(index: Int): SimulatedVector3 {
         requireValidIndex(index)
 
         return SimulatedVector3(
-            positionX[index],
-            positionY[index],
-            positionZ[index]
+            rawPositionX[index],
+            rawPositionY[index],
+            rawPositionZ[index]
         )
     }
 
@@ -96,28 +144,78 @@ class SimulatedFrame internal constructor(
         requireValidIndex(index)
 
         return SimulatedVector3(
-            velocityX[index],
-            velocityY[index],
-            velocityZ[index]
+            rawVelocityX[index],
+            rawVelocityY[index],
+            rawVelocityZ[index]
         )
     }
 
     fun teamAt(index: Int): SimulatedTeam {
         requireValidIndex(index)
 
-        return SimulatedTeam(teams[index])
+        return SimulatedTeam(rawTeams[index])
     }
 
     fun presentationIdAt(index: Int): SimulatedPresentationId {
         requireValidIndex(index)
 
-        return SimulatedPresentationId(presentationIds[index])
+        return SimulatedPresentationId(rawPresentationIds[index])
     }
 
     fun flagsAt(index: Int): SimulatedEntityFlags {
         requireValidIndex(index)
 
-        return SimulatedEntityFlags(flags[index])
+        return SimulatedEntityFlags(rawFlags[index])
+    }
+
+    fun rawEntityIdAt(index: Int): Int {
+        requireValidIndex(index)
+        return rawEntityIds[index]
+    }
+
+    fun positionXAt(index: Int): Double {
+        requireValidIndex(index)
+        return rawPositionX[index]
+    }
+
+    fun positionYAt(index: Int): Double {
+        requireValidIndex(index)
+        return rawPositionY[index]
+    }
+
+    fun positionZAt(index: Int): Double {
+        requireValidIndex(index)
+        return rawPositionZ[index]
+    }
+
+    fun yawAt(index: Int): Float {
+        requireValidIndex(index)
+        return rawYaw[index]
+    }
+
+    fun pitchAt(index: Int): Float {
+        requireValidIndex(index)
+        return rawPitch[index]
+    }
+
+    fun healthAt(index: Int): Double {
+        requireValidIndex(index)
+        return rawHealth[index]
+    }
+
+    fun maximumHealthAt(index: Int): Double {
+        requireValidIndex(index)
+        return rawMaximumHealth[index]
+    }
+
+    fun hitboxWidthAt(index: Int): Double {
+        requireValidIndex(index)
+        return rawHitboxWidth[index]
+    }
+
+    fun hitboxHeightAt(index: Int): Double {
+        requireValidIndex(index)
+        return rawHitboxHeight[index]
     }
 
     inline fun forEachIndex(action: (index: Int) -> Unit) {
@@ -130,7 +228,7 @@ class SimulatedFrame internal constructor(
     }
 
     private fun requireValidIndex(index: Int) {
-        require(index in entityIds.indices) {
+        require(index in rawEntityIds.indices) {
             "Invalid simulated frame entity index: $index"
         }
     }

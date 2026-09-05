@@ -54,13 +54,19 @@ class SimulatedGoalSet private constructor(
     fun asList(): List<Entry> =
         entries
 
-    class Builder {
+    class Builder(
+        private val defaultIntervalTicks: Int = 1
+    ) {
+        init {
+            require(defaultIntervalTicks > 0)
+        }
+
         private val entries =
             ArrayList<Entry>()
 
         fun goal(
             goal: SimulatedGoal,
-            intervalTicks: Int = 1,
+            intervalTicks: Int = defaultIntervalTicks,
             phaseOffsetTicks: Int = 0
         ): Builder {
             entries.add(
@@ -87,7 +93,15 @@ class SimulatedGoalSet private constructor(
         fun build(
             block: Builder.() -> Unit
         ): SimulatedGoalSet =
-            Builder()
+            Builder(1)
+                .apply(block)
+                .build()
+
+        fun build(
+            defaultIntervalTicks: Int,
+            block: Builder.() -> Unit
+        ): SimulatedGoalSet =
+            Builder(defaultIntervalTicks)
                 .apply(block)
                 .build()
     }

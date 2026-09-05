@@ -13,6 +13,7 @@ internal class SimulatedHpaCache(
     }
 
     private data class CacheKey(
+        val mapId: Int,
         val traversalProfile: SimulatedTraversalProfile,
         val mapRevision: SimulatedMapRevision
     )
@@ -36,10 +37,10 @@ internal class SimulatedHpaCache(
         map: SimulatedMap,
         traversalProfile: SimulatedTraversalProfile
     ): SimulatedHpaGraph {
-        val key = CacheKey(traversalProfile, map.revision)
+        val key = CacheKey(System.identityHashCode(map), traversalProfile, map.revision)
         cache[key]?.let { return it }
 
-        cache.keys.removeIf { it.mapRevision < map.revision }
+        cache.keys.removeIf { it.mapId == key.mapId && it.mapRevision < map.revision }
 
         return SimulatedHpaGraph.build(map, traversalProfile).also {
             cache[key] = it

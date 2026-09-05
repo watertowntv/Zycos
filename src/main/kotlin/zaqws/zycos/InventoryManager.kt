@@ -6,22 +6,22 @@ import net.kyori.adventure.text.Component
 import org.bukkit.Bukkit
 import org.bukkit.entity.Player
 import org.bukkit.event.EventHandler
+import org.bukkit.event.HandlerList
 import org.bukkit.event.Listener
 import org.bukkit.event.inventory.*
 import org.bukkit.inventory.InventoryHolder
 import org.bukkit.inventory.ItemStack
 import org.bukkit.inventory.ItemType
-import org.bukkit.plugin.java.JavaPlugin
 
-class InventoryManager(
-    plugin: JavaPlugin
-) : Listener {
-    init {
-        this.register(plugin)
+object InventoryManager : Listener {
+    internal fun register() {
+        Main.plugin.server.pluginManager.registerEvents(
+            this, Main.plugin
+        )
     }
 
-    fun close() {
-        this.unregister()
+    internal fun unregister() {
+        HandlerList.unregisterAll(this)
     }
 
 
@@ -44,30 +44,28 @@ class InventoryManager(
         title: Component,
         rows: Int = 3
     ) : InventoryHolder {
+        companion object {
+            private val openedGUIs = mutableSetOf<InventoryGUI>()
+        }
+
         val size = rows * 9
         private val inventory = Bukkit.createInventory(
             this,
             size,
             title
-        ).apply {
-            fill(getNamedItem(
-                ItemType.LIGHT_GRAY_STAINED_GLASS_PANE,
-                text(""),
-                hideTooltip = true
-            ))
-        }
+        )
         private val clickHandlers = arrayOfNulls<((ClickContext) -> Unit)?>(size)
 
         final override fun getInventory() = inventory
 
 
         fun open(player: Player) {
-            update()
+            refresh()
 
             player.openInventory(inventory)
         }
         fun open(players: Iterable<Player>) {
-            update()
+            refresh()
 
             players.forEach { player ->
                 player.openInventory(inventory)
@@ -98,7 +96,7 @@ class InventoryManager(
         ) {
             requireSlot(slot)
 
-            if (item != null && !item.type.isAir) inventory.setItem(slot, item)
+            if (item != null && !item.type.isAir) inventory.setItem(slot, item.clone())
             else inventory.clear(slot)
 
             clickHandlers[slot] = null
@@ -111,7 +109,7 @@ class InventoryManager(
         ) {
             requireSlot(slot)
 
-            inventory.setItem(slot, item)
+            inventory.setItem(slot, item.clone())
             clickHandlers[slot] = action
         }
 
@@ -129,24 +127,46 @@ class InventoryManager(
 
         fun fill(item: ItemStack) {
             for (slot in 0 until size) {
-                inventory.setItem(slot, item)
+                inventory.setItem(slot, item.clone())
                 clickHandlers[slot] = null
             }
+        }
+        fun fill() {
+            fill(getNamedItem(
+                ItemType.LIGHT_GRAY_STAINED_GLASS_PANE,
+                text(""),
+                hideTooltip = true
+            ))
         }
 
         internal fun handleClick(context: ClickContext) {
             clickHandlers[context.slot]?.invoke(context)
         }
         internal fun handleOpen(player: Player) {
+            openedGUIs.add(this)
             onOpen(player)
         }
         internal fun handleClose(player: Player) {
             onClose(player)
+
+            if (inventory.viewers.none { it !== player }) {
+                openedGUIs -= this
+            }
         }
 
         protected open fun onOpen(player: Player) {}
         protected open fun onClose(player: Player) {}
-        open fun update() {}
+        open fun refresh() {}
+
+        protected fun refreshAll() {
+            val type = this::class
+
+            openedGUIs.filter {
+                it::class == type
+            }.forEach {
+                it.refresh()
+            }
+        }
 
         private fun requireSlot(slot: Int) {
             require(slot in 0 until size) {

@@ -220,8 +220,8 @@ class SimulatedEngineIntegrationTest {
                     )
 
                     actions.any {
-                        it is SimulatedExternalAction.Damage &&
-                                it.actorId == actorId
+                        ((it is SimulatedExternalAction.Damage && it.actorId == actorId) ||
+                                (it is SimulatedExternalAction.Combined && it.actorId == actorId))
                     }
                 }
             )

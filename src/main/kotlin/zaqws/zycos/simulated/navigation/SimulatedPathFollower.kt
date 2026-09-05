@@ -77,9 +77,21 @@ internal class SimulatedPathFollower(
         pathStates.remove(
             entityId.value
         )
+        val slot = entityStore.slotOf(entityId)
+        if (slot >= 0) {
+            entityStore.clearSteeringVelocity(slot)
+        }
     }
 
     fun clear() {
+        val iterator = pathStates.int2ObjectEntrySet().fastIterator()
+        while (iterator.hasNext()) {
+            val entry = iterator.next()
+            val slot = entityStore.slotOf(SimulatedEntityId(entry.intKey))
+            if (slot >= 0) {
+                entityStore.clearSteeringVelocity(slot)
+            }
+        }
         pathStates.clear()
     }
 
@@ -237,30 +249,29 @@ internal class SimulatedPathFollower(
                 slot
             )
 
-        var velocity =
-            entityStore.velocity(
-                slot
+        val horizontalDistance =
+            sqrt(horizontalDistanceSquared)
+
+        val stepSpeed =
+            minOf(
+                movementSpeed,
+                horizontalDistance
             )
 
-        velocity =
-            SimulatedVector3(
-                x =
-                    differenceX *
-                            inverseDistance *
-                            movementSpeed,
+        val steeringX =
+            differenceX *
+                    inverseDistance *
+                    stepSpeed
 
-                y =
-                    velocity.y,
+        val steeringZ =
+            differenceZ *
+                    inverseDistance *
+                    stepSpeed
 
-                z =
-                    differenceZ *
-                            inverseDistance *
-                            movementSpeed
-            )
-
-        entityStore.setVelocity(
+        entityStore.setSteeringVelocity(
             slot,
-            velocity
+            steeringX,
+            steeringZ
         )
 
         entityStore.setRotation(
@@ -373,16 +384,9 @@ internal class SimulatedPathFollower(
             return
         }
 
-        val velocity =
-            entityStore.velocity(
-                slot
-            )
-
-        entityStore.setVelocity(
+        entityStore.setVelocityY(
             slot,
-            velocity.withY(
-                physicsConfig.jumpVelocity
-            )
+            physicsConfig.jumpVelocity
         )
 
         entityStore.setFlag(
@@ -402,19 +406,7 @@ internal class SimulatedPathFollower(
     private fun stopHorizontalMovement(
         slot: Int
     ) {
-        val velocity =
-            entityStore.velocity(
-                slot
-            )
-
-        entityStore.setVelocity(
-            slot,
-            SimulatedVector3(
-                x = 0.0,
-                y = velocity.y,
-                z = 0.0
-            )
-        )
+        entityStore.clearSteeringVelocity(slot)
     }
 
     private fun calculateYaw(

@@ -345,6 +345,7 @@ class SimulatedHpaPathfinder(
 
                 if (
                     canCrossPortal(
+                        map = map,
                         source =
                             currentNode.navigationNode,
                         target = otherNode,
@@ -515,6 +516,7 @@ class SimulatedHpaPathfinder(
     }
 
     private fun canCrossPortal(
+        map: SimulatedMap,
         source: NavigationNode,
         target: NavigationNode,
         request: SimulatedPathRequest
@@ -523,11 +525,63 @@ class SimulatedHpaPathfinder(
             target.floorHeightUnits -
                     source.floorHeightUnits
 
-        return verticalDifferenceUnits <=
-                request.traversalProfile
-                    .maximumStepHeightUnits &&
-                verticalDifferenceUnits >=
-                -request.maximumDropHeightUnits
+        if (
+            verticalDifferenceUnits >
+            request.traversalProfile
+                .maximumStepHeightUnits ||
+            verticalDifferenceUnits <
+            -request.maximumDropHeightUnits
+        ) {
+            return false
+        }
+
+        val profile = request.traversalProfile
+        val halfWidth = profile.width * 0.5
+        val sourcePosition = source.toPosition()
+        val targetPosition = target.toPosition()
+        val maximumY = max(sourcePosition.y, targetPosition.y) + profile.height
+
+        val jumpSweptBox =
+            zaqws.zycos.simulated.math.SimulatedAABB(
+                minimumX =
+                    min(
+                        sourcePosition.x,
+                        targetPosition.x
+                    ) -
+                            halfWidth,
+
+                minimumY =
+                    max(
+                        sourcePosition.y,
+                        targetPosition.y
+                    ),
+
+                minimumZ =
+                    min(
+                        sourcePosition.z,
+                        targetPosition.z
+                    ) -
+                            halfWidth,
+
+                maximumX =
+                    max(
+                        sourcePosition.x,
+                        targetPosition.x
+                    ) +
+                            halfWidth,
+
+                maximumY =
+                    maximumY,
+
+                maximumZ =
+                    max(
+                        sourcePosition.z,
+                        targetPosition.z
+                    ) +
+                            halfWidth
+            )
+
+        return !map.hasCollision(jumpSweptBox)
     }
 
     private fun refinePath(

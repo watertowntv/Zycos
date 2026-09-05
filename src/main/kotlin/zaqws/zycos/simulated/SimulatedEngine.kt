@@ -42,6 +42,7 @@ import zaqws.zycos.simulated.spatial.SimulatedInterestIndex
 import zaqws.zycos.simulated.spatial.SimulatedSpatialIndex
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
@@ -130,6 +131,9 @@ class SimulatedEngine internal constructor(
 
     internal val goalSets = Int2ObjectOpenHashMap<SimulatedGoalSet>()
 
+    @Volatile
+    private var simulationThread: Thread? = null
+
     private val simulationDispatcher: ExecutorCoroutineDispatcher =
         Executors.newSingleThreadExecutor { runnable ->
             Thread(
@@ -137,6 +141,7 @@ class SimulatedEngine internal constructor(
                 "Simulated-$engineNumber-Simulation"
             ).apply {
                 isDaemon = true
+                simulationThread = this
             }
         }.asCoroutineDispatcher()
 
@@ -395,15 +400,15 @@ class SimulatedEngine internal constructor(
     fun spawn(
         block: SimulatedEntityBuilder.() -> Unit
     ): SimulatedEntity {
-        check(!isClosed) {
-            "SimulatedEngine is closed"
-        }
-
         val data = SimulatedEntityBuilder()
             .apply(block)
             .build()
 
         return synchronized(spawnLock) {
+            check(!isClosed) {
+                "SimulatedEngine is closed"
+            }
+
             val entityId = allocateEntityId()
 
             knownEntityIds.add(entityId.value)
@@ -523,6 +528,9 @@ class SimulatedEngine internal constructor(
         return actions
     }
 
+    val droppedExternalActionCount: Long
+        get() = externalActionQueue.droppedCount
+
     fun drainSignals(
         maximumSignals: Int = Int.MAX_VALUE
     ): List<SimulatedSignalEvent> {
@@ -564,10 +572,10 @@ class SimulatedEngine internal constructor(
             entityId = entityId,
             position = frame.positionAt(index),
             velocity = frame.velocityAt(index),
-            yaw = frame.yaw[index],
-            pitch = frame.pitch[index],
+            yaw = frame.yawAt(index),
+            pitch = frame.pitchAt(index),
             hitbox = definition.hitbox,
-            health = frame.health[index],
+            health = frame.healthAt(index),
             attributes = definition.attributes,
             team = frame.teamAt(index),
             presentationId = frame.presentationIdAt(index),
@@ -711,40 +719,45 @@ class SimulatedEngine internal constructor(
         currentExternalFrame
 
     private suspend fun runSimulationLoop() {
-        val tickDurationNanoseconds =
-            config.simulationTickDurationNanoseconds
+        try {
+            val tickDurationNanoseconds =
+                config.simulationTickDurationNanoseconds
 
-        var scheduledNanoseconds = System.nanoTime()
+            var scheduledNanoseconds = System.nanoTime()
 
-        while (simulationScope.isActive) {
-            val currentNanoseconds = System.nanoTime()
+            while (simulationScope.isActive && lifecycleState.get() != LifecycleState.CLOSED) {
+                val currentNanoseconds = System.nanoTime()
 
-            if (currentNanoseconds < scheduledNanoseconds) {
-                delayUntil(scheduledNanoseconds)
-                continue
-            }
-
-            var executedTicks = 0
-
-            do {
-                runSimulationTick()
-
-                scheduledNanoseconds += tickDurationNanoseconds
-                executedTicks++
-
-                if (!simulationScope.isActive) return
-
-                val now = System.nanoTime()
-
-                if (now < scheduledNanoseconds) break
-
-                if (executedTicks > config.maximumCatchUpTicks) {
-                    scheduledNanoseconds =
-                        now + tickDurationNanoseconds
-
-                    break
+                if (currentNanoseconds < scheduledNanoseconds) {
+                    delayUntil(scheduledNanoseconds)
+                    continue
                 }
-            } while (true)
+
+                var executedTicks = 0
+
+                do {
+                    if (lifecycleState.get() == LifecycleState.CLOSED) return
+                    runSimulationTick()
+
+                    scheduledNanoseconds += tickDurationNanoseconds
+                    executedTicks++
+
+                    if (!simulationScope.isActive || lifecycleState.get() == LifecycleState.CLOSED) return
+
+                    val now = System.nanoTime()
+
+                    if (now < scheduledNanoseconds) break
+
+                    if (executedTicks > config.maximumCatchUpTicks) {
+                        scheduledNanoseconds =
+                            now + tickDurationNanoseconds
+
+                        break
+                    }
+                } while (true)
+            }
+        } finally {
+            cleanup()
         }
     }
 
@@ -779,12 +792,14 @@ class SimulatedEngine internal constructor(
         pathFollower.update(context)
         lookSystem.update(context)
         separationSystem.update(context)
-        physicsSystem.update(context)
         combatSystem.update(context)
+        physicsSystem.update(context)
 
         for (system in customSystems) {
             system.update(context)
         }
+
+        if (lifecycleState.get() == LifecycleState.CLOSED) return
 
         publishFrame(
             currentTick
@@ -941,7 +956,11 @@ class SimulatedEngine internal constructor(
                     val slot = entityStore.slotOf(action.sourceEntityId)
 
                     if (slot >= 0) {
-                        entityStore.setPosition(slot, action.position)
+                        teleportEntity(
+                            entityId = action.sourceEntityId,
+                            slot = slot,
+                            position = action.position
+                        )
                     }
                 }
 
@@ -1086,7 +1105,8 @@ class SimulatedEngine internal constructor(
             attributes = data.attributes,
             team = data.team,
             presentationId = data.presentationId,
-            flags = data.flags
+            flags = data.flags,
+            entityId = command.entityId
         )
 
         check(createdEntityId == command.entityId) {
@@ -1131,6 +1151,30 @@ class SimulatedEngine internal constructor(
         )
     }
 
+    private fun teleportEntity(
+        entityId: SimulatedEntityId,
+        slot: Int,
+        position: SimulatedVector3,
+        yaw: Float? = null,
+        pitch: Float? = null
+    ) {
+        if (slot < 0) return
+
+        entityStore.setPosition(slot, position)
+        entityStore.setVelocity(slot, SimulatedVector3.ZERO)
+        physicsSystem.resetFallDistance(entityId)
+        navigationSystem.clearNavigation(entityId)
+        pathFollower.clearPath(entityId)
+
+        if (yaw != null || pitch != null) {
+            entityStore.setRotation(
+                slot,
+                yaw ?: entityStore.yaw(slot),
+                pitch ?: entityStore.pitch(slot)
+            )
+        }
+    }
+
     private fun processTeleport(
         command: SimulatedCommand.Teleport
     ) {
@@ -1140,21 +1184,13 @@ class SimulatedEngine internal constructor(
 
         if (slot < 0) return
 
-        entityStore.setPosition(
-            slot,
-            command.position
+        teleportEntity(
+            entityId = command.entityId,
+            slot = slot,
+            position = command.position,
+            yaw = command.yaw,
+            pitch = command.pitch
         )
-
-        if (
-            command.yaw != null ||
-            command.pitch != null
-        ) {
-            entityStore.setRotation(
-                slot,
-                command.yaw ?: entityStore.yaw(slot),
-                command.pitch ?: entityStore.pitch(slot)
-            )
-        }
     }
 
     private fun processSetVelocity(
@@ -1298,22 +1334,22 @@ class SimulatedEngine internal constructor(
         framePublisher.publish(
             SimulatedFrame(
                 tick = currentTick,
-                entityIds = entityIds,
-                positionX = positionX,
-                positionY = positionY,
-                positionZ = positionZ,
-                velocityX = velocityX,
-                velocityY = velocityY,
-                velocityZ = velocityZ,
-                yaw = yaw,
-                pitch = pitch,
-                health = health,
-                maximumHealth = maximumHealth,
-                hitboxWidth = hitboxWidth,
-                hitboxHeight = hitboxHeight,
-                teams = teams,
-                presentationIds = presentationIds,
-                flags = flags
+                rawEntityIds = entityIds,
+                rawPositionX = positionX,
+                rawPositionY = positionY,
+                rawPositionZ = positionZ,
+                rawVelocityX = velocityX,
+                rawVelocityY = velocityY,
+                rawVelocityZ = velocityZ,
+                rawYaw = yaw,
+                rawPitch = pitch,
+                rawHealth = health,
+                rawMaximumHealth = maximumHealth,
+                rawHitboxWidth = hitboxWidth,
+                rawHitboxHeight = hitboxHeight,
+                rawTeams = teams,
+                rawPresentationIds = presentationIds,
+                rawFlags = flags
             )
         )
     }
@@ -1352,7 +1388,7 @@ class SimulatedEngine internal constructor(
         var index = 0
 
         while (index < frame.size) {
-            if (frame.entityIds[index] == entityId.value) {
+            if (frame.rawEntityIdAt(index) == entityId.value) {
                 return index
             }
 
@@ -1369,28 +1405,10 @@ class SimulatedEngine internal constructor(
         visualEventQueue.offer(event)
     }
 
-    override fun close() {
-        val job: Job?
+    private val isCleanedUp = AtomicBoolean(false)
 
-        synchronized(lifecycleLock) {
-            if (
-                lifecycleState.get() ==
-                LifecycleState.CLOSED
-            ) {
-                return
-            }
-
-            lifecycleState.set(
-                LifecycleState.CLOSED
-            )
-
-            job = simulationJob
-            simulationJob = null
-        }
-
-        runBlocking {
-            job?.cancelAndJoin()
-        }
+    private fun cleanup() {
+        if (!isCleanedUp.compareAndSet(false, true)) return
 
         simulationScope.cancel()
 
@@ -1413,5 +1431,40 @@ class SimulatedEngine internal constructor(
 
         simulationDispatcher.close()
         navigationDispatcher.close()
+    }
+
+    override fun close() {
+        val job: Job?
+
+        synchronized(lifecycleLock) {
+            synchronized(spawnLock) {
+                if (
+                    lifecycleState.get() ==
+                    LifecycleState.CLOSED
+                ) {
+                    return
+                }
+
+                lifecycleState.set(
+                    LifecycleState.CLOSED
+                )
+
+                job = simulationJob
+                simulationJob = null
+            }
+        }
+
+        if (job != null) {
+            if (Thread.currentThread() !== simulationThread) {
+                runBlocking {
+                    job.cancelAndJoin()
+                }
+                cleanup()
+            } else {
+                job.cancel()
+            }
+        } else {
+            cleanup()
+        }
     }
 }

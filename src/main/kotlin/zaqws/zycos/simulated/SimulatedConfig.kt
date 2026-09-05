@@ -74,7 +74,7 @@ data class SimulatedConfig(
         require(fullSimulationRadius >= 0.0)
 
         require(spatialCellSize.isFinite())
-        require(spatialCellSize > 0.0)
+        require(spatialCellSize >= 0.5)
 
         require(gravityPerTick.isFinite())
 

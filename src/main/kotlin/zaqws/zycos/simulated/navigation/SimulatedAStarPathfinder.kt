@@ -610,12 +610,6 @@ class SimulatedAStarPathfinder(
         val halfWidth =
             profile.width * 0.5
 
-        val minimumY =
-            min(
-                sourcePosition.y,
-                targetPosition.y
-            )
-
         val maximumY =
             max(
                 sourcePosition.y,
@@ -623,7 +617,22 @@ class SimulatedAStarPathfinder(
             ) +
                     profile.height
 
-        val sweptBoundingBox =
+        if (
+            !canOccupy(
+                map,
+                source,
+                profile
+            ) ||
+            !canOccupy(
+                map,
+                target,
+                profile
+            )
+        ) {
+            return false
+        }
+
+        val jumpSweptBox =
             SimulatedAABB(
                 minimumX =
                     min(
@@ -633,7 +642,10 @@ class SimulatedAStarPathfinder(
                             halfWidth,
 
                 minimumY =
-                    minimumY,
+                    max(
+                        sourcePosition.y,
+                        targetPosition.y
+                    ),
 
                 minimumZ =
                     min(
@@ -660,25 +672,9 @@ class SimulatedAStarPathfinder(
                             halfWidth
             )
 
-        if (
-            source.floorHeightUnits ==
-            target.floorHeightUnits
-        ) {
-            return !map.hasCollision(
-                sweptBoundingBox
-            )
-        }
-
-        return canOccupy(
-            map,
-            source,
-            profile
-        ) &&
-                canOccupy(
-                    map,
-                    target,
-                    profile
-                )
+        return !map.hasCollision(
+            jumpSweptBox
+        )
     }
 
     private fun isValidNode(

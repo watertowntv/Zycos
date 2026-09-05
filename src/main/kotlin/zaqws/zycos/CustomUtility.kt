@@ -57,6 +57,7 @@ import org.bukkit.inventory.PlayerInventory
 import org.bukkit.plugin.java.JavaPlugin
 import org.bukkit.potion.PotionEffect
 import org.bukkit.potion.PotionEffectType
+import org.bukkit.potion.PotionType
 import org.bukkit.util.Transformation
 import org.bukkit.util.Vector
 import org.joml.AxisAngle4f
@@ -220,21 +221,31 @@ fun getNamedSkull(
  * @param color Color
  * @return Potion with Custom Effect
  */
-fun getCustomPotion(
+fun getNamedPotion(
     type: PotionEffectType,
     amplifier: Int,
     duration: Int,
     particle: Boolean = true,
     name: TextComponent? = null,
-    color: Color? = null
-) = getCustomPotionImpl(
+    color: Color? = null,
+    icon: Boolean = true
+) = getNamedPotionImpl(
     ItemType.POTION,
     type,
     amplifier,
     duration,
     particle,
     name,
-    color
+    color,
+    icon
+)
+fun getNamedPotion(
+    type: PotionType,
+    name: TextComponent? = null
+) = getNamedPotionImpl(
+    ItemType.POTION,
+    type,
+    name
 )
 
 /**
@@ -248,37 +259,76 @@ fun getCustomPotion(
  * @param color Color
  * @return Splash Potion with Custom Effect
  */
-fun getCustomSplashPotion(
+fun getNamedSplashPotion(
     type: PotionEffectType,
     amplifier: Int,
     duration: Int,
     particle: Boolean = true,
     name: TextComponent? = null,
-    color: Color? = null
-) = getCustomPotionImpl(
+    color: Color? = null,
+    icon: Boolean = true
+) = getNamedPotionImpl(
     ItemType.SPLASH_POTION,
     type,
     amplifier,
     duration,
     particle,
     name,
-    color
+    color,
+    icon
+)
+fun getNamedSplashPotion(
+    type: PotionType,
+    name: TextComponent? = null
+) = getNamedPotionImpl(
+    ItemType.SPLASH_POTION,
+    type,
+    name
 )
 
-private fun getCustomPotionImpl(
+private fun getNamedPotionImpl(
     itemType: ItemType,
     type: PotionEffectType,
     amplifier: Int,
     duration: Int,
     particle: Boolean,
     name: TextComponent?,
-    color: Color?
+    color: Color?,
+    icon: Boolean = true
 ): ItemStack {
     val itemStack = itemType.createItemStack()
-    val effect = PotionEffect(type, duration, amplifier, false, particle)
+    val effect = PotionEffect(type, duration, amplifier, false, particle, icon)
     var contents = PotionContents.potionContents().addCustomEffect(effect)
 
     if (color != null) contents = contents.customColor(color)
+
+    if (name != null) {
+        val nameComponent = name.decoration(TextDecoration.ITALIC, false)
+
+        itemStack.setData(
+            DataComponentTypes.ITEM_NAME,
+            nameComponent
+        )
+        itemStack.setData(
+            DataComponentTypes.CUSTOM_NAME,
+            nameComponent
+        )
+    }
+    itemStack.setData(
+        DataComponentTypes.POTION_CONTENTS,
+        contents.build()
+    )
+
+    return itemStack
+}
+
+private fun getNamedPotionImpl(
+    itemType: ItemType,
+    potionType: PotionType,
+    name: TextComponent?
+): ItemStack {
+    val itemStack = itemType.createItemStack()
+    val contents = PotionContents.potionContents().potion(potionType)
 
     if (name != null) {
         val nameComponent = name.decoration(TextDecoration.ITALIC, false)

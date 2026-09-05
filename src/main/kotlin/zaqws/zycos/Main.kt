@@ -14,10 +14,12 @@ class Main : JavaPlugin(), CommandExecutor {
 
         OnlinePlayerManager.register()
         ClientEntityManager.register()
+        InventoryManager.register()
     }
 
     override fun onDisable() {
         OnlinePlayerManager.unregister()
         ClientEntityManager.unregister()
+        InventoryManager.unregister()
     }
 }

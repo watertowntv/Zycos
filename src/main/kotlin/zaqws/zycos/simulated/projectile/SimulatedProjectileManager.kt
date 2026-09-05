@@ -12,6 +12,7 @@ import zaqws.zycos.simulated.entity.SimulatedTeam
 import zaqws.zycos.simulated.external.SimulatedExternalAction
 import zaqws.zycos.simulated.external.SimulatedExternalFrame
 import zaqws.zycos.simulated.map.SimulatedMap
+import zaqws.zycos.simulated.math.SimulatedMath
 import zaqws.zycos.simulated.math.SimulatedVector3
 import zaqws.zycos.simulated.spatial.SimulatedSpatialIndex
 import java.util.concurrent.ArrayBlockingQueue
@@ -81,6 +82,8 @@ class SimulatedProjectileManager internal constructor(
     private val closed =
         AtomicBoolean(false)
 
+    private val spawnLock = Any()
+
     private val collisionResolver =
         SimulatedProjectileCollisionResolver(
             map,
@@ -103,40 +106,42 @@ class SimulatedProjectileManager internal constructor(
     fun spawn(
         block: SimulatedProjectileBuilder.() -> Unit
     ): SimulatedProjectile {
-        check(!closed.get()) {
-            "SimulatedProjectileManager is closed"
-        }
-
         val data =
             SimulatedProjectileBuilder()
                 .apply(block)
                 .build()
 
-        val projectileId =
-            allocateProjectileId()
+        return synchronized(spawnLock) {
+            check(!closed.get()) {
+                "SimulatedProjectileManager is closed"
+            }
 
-        knownProjectileIds.add(
-            projectileId.value
-        )
+            val projectileId =
+                allocateProjectileId()
 
-        definitions[projectileId.value] =
-            Definition(
-                source = data.source,
-                team = data.team,
-                definition = data.definition
+            knownProjectileIds.add(
+                projectileId.value
             )
 
-        commandConsumer(
-            SimulatedCommand.SpawnProjectile(
-                projectileId = projectileId,
-                data = data
-            )
-        )
+            definitions[projectileId.value] =
+                Definition(
+                    source = data.source,
+                    team = data.team,
+                    definition = data.definition
+                )
 
-        return SimulatedProjectile(
-            projectileId,
-            this
-        )
+            commandConsumer(
+                SimulatedCommand.SpawnProjectile(
+                    projectileId = projectileId,
+                    data = data
+                )
+            )
+
+            SimulatedProjectile(
+                projectileId,
+                this
+            )
+        }
     }
 
     fun getProjectile(
@@ -432,9 +437,44 @@ class SimulatedProjectileManager internal constructor(
             }
 
             val start = state.position
-            val end = start + state.velocity
-            val movement = end - start
-            val distance = movement.length
+            val remainingRange = maxOf(
+                0.0,
+                state.definition.maximumRange -
+                        state.travelledDistance
+            )
+
+            if (
+                remainingRange <=
+                SimulatedMath.EPSILON
+            ) {
+                removeStateAt(
+                    slot,
+                    tick,
+                    SimulatedProjectileRemovalReason.MAXIMUM_RANGE
+                )
+                continue
+            }
+
+            val velocityLength =
+                state.velocity.length
+            val distance =
+                minOf(
+                    velocityLength,
+                    remainingRange
+                )
+            val end =
+                if (
+                    velocityLength >
+                    SimulatedMath.EPSILON
+                ) {
+                    start +
+                            state.velocity *
+                            (distance / velocityLength)
+                } else {
+                    start
+                }
+            val movement =
+                end - start
             val hit =
                 collisionResolver.find(
                     state.source,
@@ -560,18 +600,6 @@ class SimulatedProjectileManager internal constructor(
         )
     }
 
-    internal fun close() {
-        if (!closed.compareAndSet(false, true)) {
-            return
-        }
-
-        states.clear()
-        projectileIdToSlot.clear()
-        knownProjectileIds.clear()
-        definitions.clear()
-        events.clear()
-        framePublisher.clear()
-    }
 
     private fun applyHit(
         state: State,
@@ -771,6 +799,18 @@ class SimulatedProjectileManager internal constructor(
         }
 
         return SimulatedProjectileId(value)
+    }
+
+    fun close() {
+        synchronized(spawnLock) {
+            if (!closed.compareAndSet(false, true)) return
+            knownProjectileIds.clear()
+            definitions.clear()
+            states.clear()
+            projectileIdToSlot.clear()
+            events.clear()
+            framePublisher.clear()
+        }
     }
 
     companion object {

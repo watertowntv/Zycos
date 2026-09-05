@@ -398,6 +398,52 @@ class SimulatedProjectileIntegrationTest {
         }
     }
 
+    @Test
+    @Timeout(value = 10, unit = TimeUnit.SECONDS)
+    fun `projectile does not hit target beyond maximum range`() {
+        val engine = createEngine()
+        val actorId = SimulatedExternalActorId(99L)
+
+        try {
+            engine.submitExternalFrame(
+                SimulatedExternalFrame(
+                    sequence = 1L,
+                    actors = listOf(
+                        SimulatedExternalActorSnapshot(
+                            actorId = actorId,
+                            position = SimulatedVector3(8.0, 1.0, 2.5),
+                            velocity = SimulatedVector3.ZERO,
+                            hitbox = SimulatedHitbox.DEFAULT,
+                            health = 20.0,
+                            maximumHealth = 20.0,
+                            team = SimulatedTeam(2)
+                        )
+                    )
+                )
+            )
+
+            engine.projectileManager.spawn {
+                position(2.5, 1.8, 2.5)
+                velocity(10.0, 0.0, 0.0)
+                team(SimulatedTeam(1))
+                definition(
+                    SimulatedProjectileDefinition(
+                        maximumRange = 4.0,
+                        damage = 5.0
+                    )
+                )
+            }
+
+            engine.start()
+
+            Thread.sleep(200)
+            val actions = engine.drainExternalActions()
+            assertTrue(actions.none { it.actorId == actorId })
+        } finally {
+            engine.close()
+        }
+    }
+
     private fun createEngine() =
         SimulatedEngineBuilder(
             TestSimulatedMapFactory.create()

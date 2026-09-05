@@ -170,7 +170,7 @@ class PaperSimulatedRenderer(
             updateEntity(
                 frame,
                 index,
-                frame.entityIds[index]
+                frame.rawEntityIdAt(index)
             )
         }
 
@@ -258,13 +258,13 @@ class PaperSimulatedRenderer(
         }
 
         val positionX =
-            frame.positionX[index]
+            frame.positionXAt(index)
 
         val positionY =
-            frame.positionY[index]
+            frame.positionYAt(index)
 
         val positionZ =
-            frame.positionZ[index]
+            frame.positionZAt(index)
 
         var renderedEntity =
             renderedEntities[
@@ -327,8 +327,8 @@ class PaperSimulatedRenderer(
                 positionX,
                 positionY,
                 positionZ,
-                frame.yaw[index],
-                frame.pitch[index]
+                frame.yawAt(index),
+                frame.pitchAt(index)
             )
         )
 
@@ -364,11 +364,11 @@ class PaperSimulatedRenderer(
         val location =
             Location(
                 world,
-                frame.positionX[index],
-                frame.positionY[index],
-                frame.positionZ[index],
-                frame.yaw[index],
-                frame.pitch[index]
+                frame.positionXAt(index),
+                frame.positionYAt(index),
+                frame.positionZAt(index),
+                frame.yawAt(index),
+                frame.pitchAt(index)
             )
 
         val clientEntity =
@@ -543,7 +543,7 @@ class PaperSimulatedRenderer(
 
         while (index < frame.size) {
             val entityId =
-                frame.entityIds[index]
+                frame.rawEntityIdAt(index)
 
             currentEntityIds.add(entityId)
 
@@ -554,13 +554,13 @@ class PaperSimulatedRenderer(
 
             val cellX =
                 SimulatedMath.floorToInt(
-                    frame.positionX[index] /
+                    frame.positionXAt(index) /
                             FRAME_CELL_SIZE
                 )
 
             val cellZ =
                 SimulatedMath.floorToInt(
-                    frame.positionZ[index] /
+                    frame.positionZAt(index) /
                             FRAME_CELL_SIZE
                 )
 

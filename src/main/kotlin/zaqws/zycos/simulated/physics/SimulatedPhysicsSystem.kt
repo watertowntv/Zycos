@@ -74,32 +74,24 @@ internal class SimulatedPhysicsSystem(
         val position =
             entityStore.position(slot)
 
-        var velocity =
-            entityStore.velocity(slot)
-
         val wasOnGround =
             entityStore.hasFlag(
                 slot,
                 SimulatedEntityFlag.ON_GROUND
             )
 
-        if (
-            !entityStore.hasFlag(
-                slot,
-                SimulatedEntityFlag.NO_GRAVITY
-            )
-        ) {
-            velocity =
-                velocity.withY(
-                    max(
-                        -config.maximumFallSpeed,
-                        velocity.y +
-                                config.gravityPerTick
-                    )
-                )
-        }
+        val impulse =
+            entityStore.impulseVelocity(slot)
 
-        val requestedMovement = velocity
+        val steering =
+            entityStore.steeringVelocity(slot)
+
+        val requestedMovement =
+            SimulatedVector3(
+                impulse.x + steering.x,
+                impulse.y,
+                impulse.z + steering.z
+            )
 
         val collisionResult =
             if (
@@ -149,30 +141,49 @@ internal class SimulatedPhysicsSystem(
             tick = tick
         )
 
+        var newImpulseX = impulse.x
+        var newImpulseY = impulse.y
+        var newImpulseZ = impulse.z
+
         if (
             collisionResult?.collidedX == true
         ) {
-            velocity =
-                velocity.withX(0.0)
+            newImpulseX = 0.0
+            entityStore.clearSteeringVelocity(slot)
         }
 
         if (
             collisionResult?.collidedY == true
         ) {
-            velocity =
-                velocity.withY(0.0)
+            newImpulseY = 0.0
+        } else if (
+            !entityStore.hasFlag(
+                slot,
+                SimulatedEntityFlag.NO_GRAVITY
+            )
+        ) {
+            newImpulseY =
+                max(
+                    -config.maximumFallSpeed,
+                    newImpulseY +
+                            config.gravityPerTick
+                )
         }
 
         if (
             collisionResult?.collidedZ == true
         ) {
-            velocity =
-                velocity.withZ(0.0)
+            newImpulseZ = 0.0
+            entityStore.clearSteeringVelocity(slot)
         }
 
-        velocity =
+        val draggedImpulse =
             applyDrag(
-                velocity,
+                SimulatedVector3(
+                    newImpulseX,
+                    newImpulseY,
+                    newImpulseZ
+                ),
                 onGround
             )
 
@@ -183,7 +194,7 @@ internal class SimulatedPhysicsSystem(
 
         entityStore.setVelocity(
             slot,
-            velocity
+            draggedImpulse
         )
 
         entityStore.setFlag(
@@ -207,7 +218,6 @@ internal class SimulatedPhysicsSystem(
             )
 
         if (
-            !onGround &&
             actualVerticalMovement < 0.0
         ) {
             fallDistance +=
@@ -217,8 +227,6 @@ internal class SimulatedPhysicsSystem(
                 entityIdValue,
                 fallDistance
             )
-
-            return
         }
 
         if (
@@ -245,6 +253,14 @@ internal class SimulatedPhysicsSystem(
                 entityIdValue
             )
         }
+    }
+
+    fun resetFallDistance(
+        entityId: SimulatedEntityId
+    ) {
+        fallDistanceByEntityId.remove(
+            entityId.value
+        )
     }
 
     private fun applyFallDamage(

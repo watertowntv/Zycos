@@ -167,7 +167,8 @@ class Main : JavaPlugin() {
             this,
             PaperPlayerTeamResolver.fixed(
                 PLAYER_TEAM
-            )
+            ),
+            world
         )
 
         val playerBridge = PaperPlayerBridge(

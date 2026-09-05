@@ -31,6 +31,9 @@ internal class SimulatedEntityStore(
     private var velocityY = DoubleArray(capacity)
     private var velocityZ = DoubleArray(capacity)
 
+    private var steeringVelocityX = DoubleArray(capacity)
+    private var steeringVelocityZ = DoubleArray(capacity)
+
     private var yaw = FloatArray(capacity)
     private var pitch = FloatArray(capacity)
 
@@ -71,7 +74,8 @@ internal class SimulatedEntityStore(
         attributes: SimulatedAttributes = SimulatedAttributes.DEFAULT,
         team: SimulatedTeam = SimulatedTeam.NONE,
         presentationId: SimulatedPresentationId = SimulatedPresentationId.NONE,
-        flags: SimulatedEntityFlags = SimulatedEntityFlags.NONE
+        flags: SimulatedEntityFlags = SimulatedEntityFlags.NONE,
+        entityId: SimulatedEntityId? = null
     ): SimulatedEntityId {
         require(position.isFinite)
         require(velocity.isFinite)
@@ -80,11 +84,22 @@ internal class SimulatedEntityStore(
 
         ensureCapacity(size + 1)
 
-        val entityId = allocateEntityId()
+        val resolvedEntityId = if (entityId != null) {
+            require(entityId.value > 0)
+            require(entityIdToSlot.get(entityId.value) == INVALID_SLOT) {
+                "Entity with id ${entityId.value} already exists"
+            }
+            if (entityId.value >= nextEntityId) {
+                nextEntityId = entityId.value + 1
+            }
+            entityId
+        } else {
+            allocateEntityId()
+        }
         val slot = size++
 
-        entityIds[slot] = entityId.value
-        entityIdToSlot.put(entityId.value, slot)
+        entityIds[slot] = resolvedEntityId.value
+        entityIdToSlot.put(resolvedEntityId.value, slot)
 
         positionX[slot] = position.x
         positionY[slot] = position.y
@@ -114,7 +129,7 @@ internal class SimulatedEntityStore(
         presentationIds[slot] = presentationId.value
         this.flags[slot] = flags.bits
 
-        return entityId
+        return resolvedEntityId
     }
 
     fun remove(entityId: SimulatedEntityId): Boolean {
@@ -148,6 +163,9 @@ internal class SimulatedEntityStore(
         velocityX.fill(0.0, 0, size)
         velocityY.fill(0.0, 0, size)
         velocityZ.fill(0.0, 0, size)
+
+        steeringVelocityX.fill(0.0, 0, size)
+        steeringVelocityZ.fill(0.0, 0, size)
 
         yaw.fill(0.0f, 0, size)
         pitch.fill(0.0f, 0, size)
@@ -354,9 +372,29 @@ internal class SimulatedEntityStore(
         requireValidSlot(slot)
 
         return SimulatedVector3(
+            velocityX[slot] + steeringVelocityX[slot],
+            velocityY[slot],
+            velocityZ[slot] + steeringVelocityZ[slot]
+        )
+    }
+
+    fun impulseVelocity(slot: Int): SimulatedVector3 {
+        requireValidSlot(slot)
+
+        return SimulatedVector3(
             velocityX[slot],
             velocityY[slot],
             velocityZ[slot]
+        )
+    }
+
+    fun steeringVelocity(slot: Int): SimulatedVector3 {
+        requireValidSlot(slot)
+
+        return SimulatedVector3(
+            steeringVelocityX[slot],
+            0.0,
+            steeringVelocityZ[slot]
         )
     }
 
@@ -370,6 +408,8 @@ internal class SimulatedEntityStore(
         velocityX[slot] = velocity.x
         velocityY[slot] = velocity.y
         velocityZ[slot] = velocity.z
+        steeringVelocityX[slot] = 0.0
+        steeringVelocityZ[slot] = 0.0
     }
 
     fun setVelocity(
@@ -386,6 +426,18 @@ internal class SimulatedEntityStore(
         velocityX[slot] = x
         velocityY[slot] = y
         velocityZ[slot] = z
+        steeringVelocityX[slot] = 0.0
+        steeringVelocityZ[slot] = 0.0
+    }
+
+    fun setVelocityY(
+        slot: Int,
+        y: Double
+    ) {
+        requireValidSlot(slot)
+        require(y.isFinite())
+
+        velocityY[slot] = y
     }
 
     fun addVelocity(
@@ -398,6 +450,26 @@ internal class SimulatedEntityStore(
         velocityX[slot] += velocity.x
         velocityY[slot] += velocity.y
         velocityZ[slot] += velocity.z
+    }
+
+    fun setSteeringVelocity(
+        slot: Int,
+        x: Double,
+        z: Double
+    ) {
+        requireValidSlot(slot)
+        require(x.isFinite())
+        require(z.isFinite())
+
+        steeringVelocityX[slot] = x
+        steeringVelocityZ[slot] = z
+    }
+
+    fun clearSteeringVelocity(slot: Int) {
+        requireValidSlot(slot)
+
+        steeringVelocityX[slot] = 0.0
+        steeringVelocityZ[slot] = 0.0
     }
 
     fun yaw(slot: Int): Float {
@@ -670,6 +742,9 @@ internal class SimulatedEntityStore(
         velocityY = velocityY.copyOf(capacity)
         velocityZ = velocityZ.copyOf(capacity)
 
+        steeringVelocityX = steeringVelocityX.copyOf(capacity)
+        steeringVelocityZ = steeringVelocityZ.copyOf(capacity)
+
         yaw = yaw.copyOf(capacity)
         pitch = pitch.copyOf(capacity)
 
@@ -706,6 +781,9 @@ internal class SimulatedEntityStore(
         velocityY[destinationSlot] = velocityY[sourceSlot]
         velocityZ[destinationSlot] = velocityZ[sourceSlot]
 
+        steeringVelocityX[destinationSlot] = steeringVelocityX[sourceSlot]
+        steeringVelocityZ[destinationSlot] = steeringVelocityZ[sourceSlot]
+
         yaw[destinationSlot] = yaw[sourceSlot]
         pitch[destinationSlot] = pitch[sourceSlot]
 
@@ -738,6 +816,9 @@ internal class SimulatedEntityStore(
         velocityX[slot] = 0.0
         velocityY[slot] = 0.0
         velocityZ[slot] = 0.0
+
+        steeringVelocityX[slot] = 0.0
+        steeringVelocityZ[slot] = 0.0
 
         yaw[slot] = 0.0f
         pitch[slot] = 0.0f

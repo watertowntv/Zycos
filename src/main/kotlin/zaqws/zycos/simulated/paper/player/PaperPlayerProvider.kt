@@ -2,6 +2,7 @@
 
 package zaqws.zycos.simulated.paper.player
 
+import org.bukkit.World
 import org.bukkit.attribute.Attribute
 import org.bukkit.entity.Player
 import org.bukkit.plugin.java.JavaPlugin
@@ -29,10 +30,11 @@ fun interface PaperPlayerTeamResolver {
     }
 }
 
-class PaperPlayerProvider(
+class PaperPlayerProvider @JvmOverloads constructor(
     private val plugin: JavaPlugin,
     private val teamResolver: PaperPlayerTeamResolver =
-        PaperPlayerTeamResolver.NONE
+        PaperPlayerTeamResolver.NONE,
+    val world: World? = null
 ) : SimulatedExternalActorProvider {
     private val playerIds =
         HashMap<UUID, SimulatedExternalActorId>()
@@ -53,7 +55,7 @@ class PaperPlayerProvider(
         }
 
         val onlinePlayers =
-            plugin.server.onlinePlayers
+            world?.players ?: plugin.server.onlinePlayers
 
         if (onlinePlayers.isEmpty()) {
             removeOfflineMappings(
@@ -123,9 +125,15 @@ class PaperPlayerProvider(
                 actorId
             ] ?: return null
 
-        return plugin.server.getPlayer(
+        val player = plugin.server.getPlayer(
             uniqueId
-        )
+        ) ?: return null
+
+        if (world != null && player.world != world) {
+            return null
+        }
+
+        return player
     }
 
     fun playerUniqueId(

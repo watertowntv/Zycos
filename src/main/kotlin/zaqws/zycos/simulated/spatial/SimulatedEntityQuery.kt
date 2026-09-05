@@ -187,23 +187,34 @@ internal class SimulatedEntityQuery(
         excludingEntityId: SimulatedEntityId? = null,
         predicate: (slot: Int) -> Boolean = { true }
     ): List<SimulatedEntityId> {
+        val expansionX =
+            spatialIndex.maximumHitboxHalfWidth
+
+        val expansionY =
+            spatialIndex.maximumHitboxHeight
+
         val minimumCell =
             spatialIndex.cellOf(
                 SimulatedVector3(
-                    boundingBox.minimumX,
-                    boundingBox.minimumY,
-                    boundingBox.minimumZ
+                    boundingBox.minimumX -
+                            expansionX,
+                    boundingBox.minimumY -
+                            expansionY,
+                    boundingBox.minimumZ -
+                            expansionX
                 )
             )
 
         val maximumCell =
             spatialIndex.cellOf(
                 SimulatedVector3(
-                    boundingBox.maximumX -
+                    boundingBox.maximumX +
+                            expansionX -
                             SimulatedMath.EPSILON,
                     boundingBox.maximumY -
                             SimulatedMath.EPSILON,
-                    boundingBox.maximumZ -
+                    boundingBox.maximumZ +
+                            expansionX -
                             SimulatedMath.EPSILON
                 )
             )

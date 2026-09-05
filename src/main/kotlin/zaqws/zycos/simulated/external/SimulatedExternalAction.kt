@@ -28,17 +28,39 @@ sealed interface SimulatedExternalAction {
         }
     }
 
+    data class Combined(
+        override val actorId: SimulatedExternalActorId,
+        val damage: Double,
+        val knockbackVelocity: SimulatedVector3? = null,
+        val sourceEntityId: SimulatedEntityId? = null
+    ) : SimulatedExternalAction {
+        init {
+            require(damage.isFinite())
+            require(damage >= 0.0)
+            if (knockbackVelocity != null) {
+                require(knockbackVelocity.isFinite)
+            }
+        }
+    }
 }
 
 internal class SimulatedExternalActionQueue(maximumActions: Int) {
     private val queue = ArrayBlockingQueue<SimulatedExternalAction>(maximumActions)
+    private val droppedActionCount = java.util.concurrent.atomic.AtomicLong(0L)
+
+    val droppedCount: Long
+        get() = droppedActionCount.get()
 
     init {
         require(maximumActions > 0)
     }
 
     fun offer(action: SimulatedExternalAction) {
-        while (!queue.offer(action)) queue.poll()
+        while (!queue.offer(action)) {
+            if (queue.poll() != null) {
+                droppedActionCount.incrementAndGet()
+            }
+        }
     }
 
     fun drainTo(

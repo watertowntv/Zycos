@@ -7,6 +7,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import org.bukkit.event.EventHandler
 import org.bukkit.event.EventPriority
 import org.bukkit.event.HandlerList
@@ -44,6 +46,9 @@ class SimulatedMapUpdater(
 
     private val closed =
         AtomicBoolean(false)
+
+    private val updateMutex =
+        Mutex()
 
     private val scopeJob =
         SupervisorJob(
@@ -152,12 +157,15 @@ class SimulatedMapUpdater(
         }
 
         scope.launch {
+            var succeeded = false
             try {
                 processUpdates()
+                succeeded = true
             } finally {
                 updateRunning.set(false)
 
                 if (
+                    succeeded &&
                     !closed.get() &&
                     dirtyChunks.isNotEmpty()
                 ) {
@@ -204,24 +212,41 @@ class SimulatedMapUpdater(
     }
 
     private suspend fun processUpdates() {
-        while (!closed.get()) {
-            val coordinates =
-                drainDirtyChunks()
+        updateMutex.withLock {
+            while (!closed.get()) {
+                val coordinates =
+                    drainDirtyChunks()
 
-            if (coordinates.isEmpty()) {
-                return
+                if (coordinates.isEmpty()) {
+                    return
+                }
+
+                try {
+                    val patch =
+                        patchBaker.bakeChunks(
+                            coordinates
+                        ) ?: continue
+
+                    if (closed.get()) {
+                        return
+                    }
+
+                    map.applyPatch(patch)
+                } catch (throwable: Throwable) {
+                    if (!closed.get()) {
+                        for (coordinate in coordinates) {
+                            dirtyChunks.add(
+                                SimulatedMap
+                                    .packChunkCoordinates(
+                                        coordinate.chunkX,
+                                        coordinate.chunkZ
+                                    )
+                            )
+                        }
+                    }
+                    throw throwable
+                }
             }
-
-            val patch =
-                patchBaker.bakeChunks(
-                    coordinates
-                ) ?: continue
-
-            if (closed.get()) {
-                return
-            }
-
-            map.applyPatch(patch)
         }
     }
 
