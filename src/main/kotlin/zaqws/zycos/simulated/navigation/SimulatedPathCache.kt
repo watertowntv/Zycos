@@ -1,6 +1,26 @@
 package zaqws.zycos.simulated.navigation
 
+import zaqws.zycos.simulated.map.SimulatedMap
 import zaqws.zycos.simulated.map.SimulatedMapRevision
+import java.lang.ref.WeakReference
+
+internal class SimulatedMapReferenceKey(map: SimulatedMap) {
+    private val weakRef = WeakReference(map)
+    private val hash = System.identityHashCode(map)
+
+    val map: SimulatedMap?
+        get() = weakRef.get()
+
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other !is SimulatedMapReferenceKey) return false
+        val my = weakRef.get() ?: return false
+        val target = other.weakRef.get() ?: return false
+        return my === target
+    }
+
+    override fun hashCode(): Int = hash
+}
 
 internal class SimulatedPathCache(
     private val maximumEntries: Int = DEFAULT_MAXIMUM_ENTRIES
@@ -11,6 +31,7 @@ internal class SimulatedPathCache(
     }
 
     private data class CacheKey(
+        val mapKey: SimulatedMapReferenceKey,
         val start: NavigationNode,
         val target: NavigationNode,
         val traversalProfile: SimulatedTraversalProfile,
@@ -42,8 +63,8 @@ internal class SimulatedPathCache(
     }
 
     @Synchronized
-    fun get(request: SimulatedPathRequest): SimulatedPathResult? =
-        when (val value = cache[keyOf(request)] ?: return null) {
+    fun get(map: SimulatedMap, request: SimulatedPathRequest): SimulatedPathResult? =
+        when (val value = cache[keyOf(map, request)] ?: return null) {
             is CacheValue.Success -> SimulatedPathResult.Success(
                 requestId = request.requestId,
                 entityId = request.entityId,
@@ -60,7 +81,7 @@ internal class SimulatedPathCache(
         }
 
     @Synchronized
-    fun put(request: SimulatedPathRequest, result: SimulatedPathResult) {
+    fun put(map: SimulatedMap, request: SimulatedPathRequest, result: SimulatedPathResult) {
         if (result.mapRevision != request.mapRevision) return
 
         val value = when (result) {
@@ -71,12 +92,13 @@ internal class SimulatedPathCache(
             is SimulatedPathResult.Invalid -> return
         }
 
-        cache[keyOf(request)] = value
+        cache[keyOf(map, request)] = value
     }
 
     @Synchronized
-    fun invalidateBefore(revision: SimulatedMapRevision) {
-        cache.keys.removeIf { it.mapRevision < revision }
+    fun invalidateBefore(map: SimulatedMap, revision: SimulatedMapRevision) {
+        val key = SimulatedMapReferenceKey(map)
+        cache.keys.removeIf { it.mapKey == key && it.mapRevision < revision }
     }
 
     @Synchronized
@@ -84,7 +106,8 @@ internal class SimulatedPathCache(
         cache.clear()
     }
 
-    private fun keyOf(request: SimulatedPathRequest) = CacheKey(
+    private fun keyOf(map: SimulatedMap, request: SimulatedPathRequest) = CacheKey(
+        mapKey = SimulatedMapReferenceKey(map),
         start = request.start,
         target = request.target,
         traversalProfile = request.traversalProfile,

@@ -299,61 +299,136 @@ sealed interface SimulatedProjectileEvent {
 
 class SimulatedProjectileFrame internal constructor(
     val tick: Long,
-    val projectileIds: IntArray,
-    val positionX: DoubleArray,
-    val positionY: DoubleArray,
-    val positionZ: DoubleArray,
-    val velocityX: DoubleArray,
-    val velocityY: DoubleArray,
-    val velocityZ: DoubleArray,
-    val presentationIds: IntArray,
-    val ageTicks: IntArray,
-    val travelledDistance: DoubleArray
+    internal val rawProjectileIds: IntArray,
+    internal val rawPositionX: DoubleArray,
+    internal val rawPositionY: DoubleArray,
+    internal val rawPositionZ: DoubleArray,
+    internal val rawVelocityX: DoubleArray,
+    internal val rawVelocityY: DoubleArray,
+    internal val rawVelocityZ: DoubleArray,
+    internal val rawPresentationIds: IntArray,
+    internal val rawAgeTicks: IntArray,
+    internal val rawTravelledDistance: DoubleArray
 ) {
     val size: Int
-        get() = projectileIds.size
+        get() = rawProjectileIds.size
+
+    val projectileIds: IntArray
+        get() = rawProjectileIds.clone()
+
+    val positionX: DoubleArray
+        get() = rawPositionX.clone()
+
+    val positionY: DoubleArray
+        get() = rawPositionY.clone()
+
+    val positionZ: DoubleArray
+        get() = rawPositionZ.clone()
+
+    val velocityX: DoubleArray
+        get() = rawVelocityX.clone()
+
+    val velocityY: DoubleArray
+        get() = rawVelocityY.clone()
+
+    val velocityZ: DoubleArray
+        get() = rawVelocityZ.clone()
+
+    val presentationIds: IntArray
+        get() = rawPresentationIds.clone()
+
+    val ageTicks: IntArray
+        get() = rawAgeTicks.clone()
+
+    val travelledDistance: DoubleArray
+        get() = rawTravelledDistance.clone()
 
     init {
-        require(positionX.size == size)
-        require(positionY.size == size)
-        require(positionZ.size == size)
-        require(velocityX.size == size)
-        require(velocityY.size == size)
-        require(velocityZ.size == size)
-        require(presentationIds.size == size)
-        require(ageTicks.size == size)
-        require(travelledDistance.size == size)
+        require(rawPositionX.size == size)
+        require(rawPositionY.size == size)
+        require(rawPositionZ.size == size)
+        require(rawVelocityX.size == size)
+        require(rawVelocityY.size == size)
+        require(rawVelocityZ.size == size)
+        require(rawPresentationIds.size == size)
+        require(rawAgeTicks.size == size)
+        require(rawTravelledDistance.size == size)
+    }
+
+    fun rawProjectileIdAt(index: Int): Int {
+        require(index in rawProjectileIds.indices)
+        return rawProjectileIds[index]
     }
 
     fun projectileIdAt(index: Int): SimulatedProjectileId {
-        require(index in projectileIds.indices)
+        require(index in rawProjectileIds.indices)
         return SimulatedProjectileId(
-            projectileIds[index]
+            rawProjectileIds[index]
         )
+    }
+
+    fun positionXAt(index: Int): Double {
+        require(index in rawProjectileIds.indices)
+        return rawPositionX[index]
+    }
+
+    fun positionYAt(index: Int): Double {
+        require(index in rawProjectileIds.indices)
+        return rawPositionY[index]
+    }
+
+    fun positionZAt(index: Int): Double {
+        require(index in rawProjectileIds.indices)
+        return rawPositionZ[index]
     }
 
     fun positionAt(index: Int): SimulatedVector3 {
-        require(index in projectileIds.indices)
+        require(index in rawProjectileIds.indices)
         return SimulatedVector3(
-            positionX[index],
-            positionY[index],
-            positionZ[index]
+            rawPositionX[index],
+            rawPositionY[index],
+            rawPositionZ[index]
         )
     }
 
+    fun velocityXAt(index: Int): Double {
+        require(index in rawProjectileIds.indices)
+        return rawVelocityX[index]
+    }
+
+    fun velocityYAt(index: Int): Double {
+        require(index in rawProjectileIds.indices)
+        return rawVelocityY[index]
+    }
+
+    fun velocityZAt(index: Int): Double {
+        require(index in rawProjectileIds.indices)
+        return rawVelocityZ[index]
+    }
+
     fun velocityAt(index: Int): SimulatedVector3 {
-        require(index in projectileIds.indices)
+        require(index in rawProjectileIds.indices)
         return SimulatedVector3(
-            velocityX[index],
-            velocityY[index],
-            velocityZ[index]
+            rawVelocityX[index],
+            rawVelocityY[index],
+            rawVelocityZ[index]
         )
     }
 
     fun presentationIdAt(index: Int) =
         SimulatedPresentationId(
-            presentationIds[index]
+            rawPresentationIds[index]
         )
+
+    fun ageTicksAt(index: Int): Int {
+        require(index in rawProjectileIds.indices)
+        return rawAgeTicks[index]
+    }
+
+    fun travelledDistanceAt(index: Int): Double {
+        require(index in rawProjectileIds.indices)
+        return rawTravelledDistance[index]
+    }
 
     inline fun forEachIndex(action: (index: Int) -> Unit) {
         var index = 0
@@ -368,16 +443,16 @@ class SimulatedProjectileFrame internal constructor(
         val EMPTY =
             SimulatedProjectileFrame(
                 tick = 0L,
-                projectileIds = IntArray(0),
-                positionX = DoubleArray(0),
-                positionY = DoubleArray(0),
-                positionZ = DoubleArray(0),
-                velocityX = DoubleArray(0),
-                velocityY = DoubleArray(0),
-                velocityZ = DoubleArray(0),
-                presentationIds = IntArray(0),
-                ageTicks = IntArray(0),
-                travelledDistance = DoubleArray(0)
+                rawProjectileIds = IntArray(0),
+                rawPositionX = DoubleArray(0),
+                rawPositionY = DoubleArray(0),
+                rawPositionZ = DoubleArray(0),
+                rawVelocityX = DoubleArray(0),
+                rawVelocityY = DoubleArray(0),
+                rawVelocityZ = DoubleArray(0),
+                rawPresentationIds = IntArray(0),
+                rawAgeTicks = IntArray(0),
+                rawTravelledDistance = DoubleArray(0)
             )
     }
 }

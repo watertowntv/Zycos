@@ -586,16 +586,16 @@ class SimulatedProjectileManager internal constructor(
         framePublisher.publish(
             SimulatedProjectileFrame(
                 tick = tick,
-                projectileIds = projectileIds,
-                positionX = positionX,
-                positionY = positionY,
-                positionZ = positionZ,
-                velocityX = velocityX,
-                velocityY = velocityY,
-                velocityZ = velocityZ,
-                presentationIds = presentationIds,
-                ageTicks = ageTicks,
-                travelledDistance = travelledDistance
+                rawProjectileIds = projectileIds,
+                rawPositionX = positionX,
+                rawPositionY = positionY,
+                rawPositionZ = positionZ,
+                rawVelocityX = velocityX,
+                rawVelocityY = velocityY,
+                rawVelocityZ = velocityZ,
+                rawPresentationIds = presentationIds,
+                rawAgeTicks = ageTicks,
+                rawTravelledDistance = travelledDistance
             )
         )
     }
@@ -671,36 +671,23 @@ class SimulatedProjectileManager internal constructor(
                             SimulatedProjectileSource.Entity)
                         ?.entityId
 
-                if (
-                    hit.actor.isDamageable &&
-                    state.definition.damage > 0.0
-                ) {
-                    externalActionConsumer(
-                        SimulatedExternalAction.Damage(
-                            actorId =
-                                hit.actor.actorId,
-                            amount =
-                                state.definition.damage,
-                            sourceEntityId =
-                                sourceEntityId
-                        )
-                    )
-                }
+                if (hit.actor.isDamageable) {
+                    val damage =
+                        if (state.definition.damage > 0.0) state.definition.damage else 0.0
 
-                if (
-                    hit.actor.isDamageable &&
-                    state.definition.knockbackStrength > 0.0
-                ) {
-                    externalActionConsumer(
-                        SimulatedExternalAction.Knockback(
-                            actorId =
-                                hit.actor.actorId,
-                            velocity =
-                                knockbackVelocity(state),
-                            sourceEntityId =
-                                sourceEntityId
+                    val knockback =
+                        if (state.definition.knockbackStrength > 0.0) knockbackVelocity(state) else null
+
+                    if (damage > 0.0 || knockback != null) {
+                        externalActionConsumer(
+                            SimulatedExternalAction.Combined(
+                                actorId = hit.actor.actorId,
+                                damage = damage,
+                                knockbackVelocity = knockback,
+                                sourceEntityId = sourceEntityId
+                            )
                         )
-                    )
+                    }
                 }
             }
         }

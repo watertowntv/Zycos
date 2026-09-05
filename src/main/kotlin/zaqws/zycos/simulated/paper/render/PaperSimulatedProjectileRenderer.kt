@@ -110,7 +110,7 @@ class PaperSimulatedProjectileRenderer(
 
         while (index < frame.size) {
             val projectileIdValue =
-                frame.projectileIds[index]
+                frame.rawProjectileIdAt(index)
 
             currentProjectileIds.add(
                 projectileIdValue
@@ -199,9 +199,9 @@ class PaperSimulatedProjectileRenderer(
             return
         }
 
-        val positionX = frame.positionX[index]
-        val positionY = frame.positionY[index]
-        val positionZ = frame.positionZ[index]
+        val positionX = frame.positionXAt(index)
+        val positionY = frame.positionYAt(index)
+        val positionZ = frame.positionZAt(index)
 
         var renderedProjectile =
             renderedProjectiles[
@@ -403,9 +403,9 @@ class PaperSimulatedProjectileRenderer(
         frame: SimulatedProjectileFrame,
         index: Int
     ): Location {
-        val velocityX = frame.velocityX[index]
-        val velocityY = frame.velocityY[index]
-        val velocityZ = frame.velocityZ[index]
+        val velocityX = frame.velocityXAt(index)
+        val velocityY = frame.velocityYAt(index)
+        val velocityZ = frame.velocityZAt(index)
 
         val horizontalLength =
             sqrt(
@@ -445,9 +445,9 @@ class PaperSimulatedProjectileRenderer(
 
         return Location(
             world,
-            frame.positionX[index],
-            frame.positionY[index],
-            frame.positionZ[index],
+            frame.positionXAt(index),
+            frame.positionYAt(index),
+            frame.positionZAt(index),
             yaw,
             pitch
         )

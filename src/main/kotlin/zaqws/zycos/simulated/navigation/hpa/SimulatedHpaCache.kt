@@ -1,8 +1,9 @@
 package zaqws.zycos.simulated.navigation.hpa
 
 import zaqws.zycos.simulated.map.SimulatedMap
-import zaqws.zycos.simulated.navigation.SimulatedTraversalProfile
 import zaqws.zycos.simulated.map.SimulatedMapRevision
+import zaqws.zycos.simulated.navigation.SimulatedMapReferenceKey
+import zaqws.zycos.simulated.navigation.SimulatedTraversalProfile
 
 internal class SimulatedHpaCache(
     private val maximumEntries: Int = DEFAULT_MAXIMUM_ENTRIES
@@ -13,7 +14,7 @@ internal class SimulatedHpaCache(
     }
 
     private data class CacheKey(
-        val mapId: Int,
+        val mapKey: SimulatedMapReferenceKey,
         val traversalProfile: SimulatedTraversalProfile,
         val mapRevision: SimulatedMapRevision
     )
@@ -36,14 +37,15 @@ internal class SimulatedHpaCache(
     fun graph(
         map: SimulatedMap,
         traversalProfile: SimulatedTraversalProfile
-    ): SimulatedHpaGraph {
-        val key = CacheKey(System.identityHashCode(map), traversalProfile, map.revision)
+    ): SimulatedHpaGraph? {
+        val mapKey = SimulatedMapReferenceKey(map)
+        val key = CacheKey(mapKey, traversalProfile, map.revision)
         cache[key]?.let { return it }
 
-        cache.keys.removeIf { it.mapId == key.mapId && it.mapRevision < map.revision }
+        cache.keys.removeIf { it.mapKey == mapKey && it.mapRevision < map.revision }
 
-        return SimulatedHpaGraph.build(map, traversalProfile).also {
-            cache[key] = it
-        }
+        val built = SimulatedHpaGraph.build(map, traversalProfile) ?: return null
+        cache[key] = built
+        return built
     }
 }

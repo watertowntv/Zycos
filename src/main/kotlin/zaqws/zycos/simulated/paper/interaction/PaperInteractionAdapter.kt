@@ -15,12 +15,19 @@ class PaperInteractionAdapter(
         player: Player,
         clientEntityId: Int
     ): Boolean {
-        val damage =
+        val cooldown = player.attackCooldown
+        if (cooldown < 0.2f) {
+            return false
+        }
+
+        val baseDamage =
             player.getAttribute(
                 Attribute.ATTACK_DAMAGE
             )?.value
                 ?.coerceAtLeast(0.0)
                 ?: DEFAULT_ATTACK_DAMAGE
+
+        val damage = baseDamage * (0.2 + 0.8 * cooldown * cooldown)
 
         return interactionHandler.attack(
             player = player,
@@ -60,6 +67,10 @@ class PaperInteractionAdapter(
     ): Boolean {
         require(damage.isFinite())
         require(damage >= 0.0)
+
+        if (player.attackCooldown < 0.2f) {
+            return false
+        }
 
         if (
             damage <=

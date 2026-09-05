@@ -147,6 +147,31 @@ class ClientEntityInteractionHandler @JvmOverloads constructor(
                 eyeDistanceSquared
             }
 
-        return minDistanceSquared <= maximumReachDistanceSquared
+        if (minDistanceSquared > maximumReachDistanceSquared) {
+            return false
+        }
+
+        val targetVec = org.bukkit.util.Vector(
+            targetPosition.x,
+            targetPosition.y + snapshot.hitbox.height * 0.5,
+            targetPosition.z
+        )
+        val direction = targetVec.subtract(eyeLoc.toVector())
+        val distance = direction.length()
+        if (distance > 1e-4) {
+            direction.normalize()
+            val rayTrace = player.world.rayTraceBlocks(
+                eyeLoc,
+                direction,
+                distance,
+                org.bukkit.FluidCollisionMode.NEVER,
+                true
+            )
+            if (rayTrace != null && rayTrace.hitBlock != null) {
+                return false
+            }
+        }
+
+        return true
     }
 }

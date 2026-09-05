@@ -27,6 +27,7 @@ class SimulatedHpaPathfinder(
         }
 
         localPathCache.invalidateBefore(
+            map,
             request.mapRevision
         )
 
@@ -56,7 +57,7 @@ class SimulatedHpaPathfinder(
             cache.graph(
                 map,
                 request.traversalProfile
-            )
+            ) ?: return invalid(request)
 
         val startCluster =
             graph.cluster(
@@ -727,6 +728,7 @@ class SimulatedHpaPathfinder(
 
         val cachedResult =
             localPathCache.get(
+                map,
                 localRequest
             )
 
@@ -760,6 +762,7 @@ class SimulatedHpaPathfinder(
                     SimulatedPathResult.Success
         ) {
             localPathCache.put(
+                map,
                 localRequest,
                 result
             )
@@ -772,6 +775,7 @@ class SimulatedHpaPathfinder(
             start.chunkZ != target.chunkZ
         ) {
             localPathCache.put(
+                map,
                 localRequest,
                 result
             )
@@ -795,6 +799,7 @@ class SimulatedHpaPathfinder(
                     )
 
                 localPathCache.put(
+                    map,
                     localRequest,
                     unreachableResult
                 )
@@ -806,6 +811,7 @@ class SimulatedHpaPathfinder(
         }
 
         localPathCache.put(
+            map,
             localRequest,
             result
         )

@@ -127,4 +127,53 @@ class SimulatedPhysicsSystemTest {
         val impulseAfterPhysics = store.impulseVelocity(slot)
         assertEquals(1.0 * physicsConfig.groundFriction, impulseAfterPhysics.z, 0.001)
     }
+
+    @Test
+    fun testMovementVelocityRecordsActualDisplacement() {
+        val map = TestSimulatedMapFactory.create()
+        val store = SimulatedEntityStore()
+        val physicsSystem = SimulatedPhysicsSystem(
+            entityStore = store,
+            map = map,
+            damageConsumer = { _, _, _ -> }
+        )
+
+        val entityId = store.create(
+            position = SimulatedVector3(2.5, 1.0, 2.5),
+            attributes = SimulatedAttributes(movementSpeed = 0.2)
+        )
+        val slot = store.requireSlot(entityId)
+        store.setFlag(slot, SimulatedEntityFlag.ON_GROUND, true)
+        store.setSteeringVelocity(slot, 0.2, 0.0)
+
+        val tickContext = SimulatedSystemContext(tick = 1L, deltaSeconds = 0.05)
+        physicsSystem.update(tickContext)
+
+        val movement = store.movementVelocity(slot)
+        assertTrue(movement.x > 0.0)
+        assertEquals(store.position(slot).x - 2.5, movement.x, 0.0001)
+
+        val publishedVelX = DoubleArray(1)
+        val publishedVelY = DoubleArray(1)
+        val publishedVelZ = DoubleArray(1)
+        store.copyFrameStateTo(
+            entityIds = IntArray(1),
+            positionX = DoubleArray(1),
+            positionY = DoubleArray(1),
+            positionZ = DoubleArray(1),
+            velocityX = publishedVelX,
+            velocityY = publishedVelY,
+            velocityZ = publishedVelZ,
+            yaw = FloatArray(1),
+            pitch = FloatArray(1),
+            health = DoubleArray(1),
+            maximumHealth = DoubleArray(1),
+            hitboxWidth = DoubleArray(1),
+            hitboxHeight = DoubleArray(1),
+            teams = IntArray(1),
+            presentationIds = IntArray(1),
+            flags = LongArray(1)
+        )
+        assertEquals(movement.x, publishedVelX[0], 0.0001)
+    }
 }

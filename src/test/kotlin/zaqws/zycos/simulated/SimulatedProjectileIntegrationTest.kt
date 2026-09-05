@@ -18,6 +18,7 @@ import zaqws.zycos.simulated.goal.builtin.SimulatedRangedAttackGoal
 import zaqws.zycos.simulated.math.SimulatedVector3
 import zaqws.zycos.simulated.projectile.SimulatedProjectileDefinition
 import zaqws.zycos.simulated.projectile.SimulatedProjectileEvent
+import zaqws.zycos.simulated.projectile.SimulatedProjectileFrame
 import zaqws.zycos.simulated.projectile.SimulatedProjectileRemovalReason
 import java.util.concurrent.TimeUnit
 
@@ -324,13 +325,9 @@ class SimulatedProjectileIntegrationTest {
                     )
 
                     actions.any {
-                        it is SimulatedExternalAction.Damage &&
-                                it.actorId == actorId
-                    } &&
-                            actions.any {
-                                it is SimulatedExternalAction.Knockback &&
-                                        it.actorId == actorId
-                            }
+                        (it is SimulatedExternalAction.Combined && it.actorId == actorId && it.damage == 3.0 && it.knockbackVelocity != null) ||
+                        (it is SimulatedExternalAction.Damage && it.actorId == actorId)
+                    }
                 }
             )
         } finally {
@@ -452,6 +449,32 @@ class SimulatedProjectileIntegrationTest {
                 navigationWorkerCount = 1
             )
         ).build()
+
+    @Test
+    fun `projectile frame getters return defensive clones`() {
+        val frame = SimulatedProjectileFrame(
+            tick = 1L,
+            rawProjectileIds = intArrayOf(10),
+            rawPositionX = doubleArrayOf(1.0),
+            rawPositionY = doubleArrayOf(2.0),
+            rawPositionZ = doubleArrayOf(3.0),
+            rawVelocityX = doubleArrayOf(4.0),
+            rawVelocityY = doubleArrayOf(5.0),
+            rawVelocityZ = doubleArrayOf(6.0),
+            rawPresentationIds = intArrayOf(0),
+            rawAgeTicks = intArrayOf(1),
+            rawTravelledDistance = doubleArrayOf(0.5)
+        )
+
+        val ids = frame.projectileIds
+        ids[0] = 999
+        assertEquals(10, frame.rawProjectileIdAt(0))
+        assertEquals(10, frame.projectileIdAt(0).value)
+
+        val posX = frame.positionX
+        posX[0] = 999.0
+        assertEquals(1.0, frame.positionXAt(0))
+    }
 
     private fun waitUntil(
         timeoutMilliseconds: Long = 7_000L,

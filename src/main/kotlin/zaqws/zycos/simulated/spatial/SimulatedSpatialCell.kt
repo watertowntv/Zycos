@@ -53,9 +53,22 @@ data class SimulatedSpatialCell(
                 cell.z
             )
 
-        internal const val X_BITS = 25
-        internal const val Y_BITS = 14
-        internal const val Z_BITS = 25
+        fun isValidPosition(
+            position: SimulatedVector3,
+            cellSize: Double
+        ): Boolean {
+            if (!position.isFinite || !cellSize.isFinite() || cellSize <= 0.0) return false
+            val cellX = SimulatedMath.floorToInt(position.x / cellSize)
+            val cellY = SimulatedMath.floorToInt(position.y / cellSize)
+            val cellZ = SimulatedMath.floorToInt(position.z / cellSize)
+            return cellX in MINIMUM_X..MAXIMUM_X &&
+                    cellY in MINIMUM_Y..MAXIMUM_Y &&
+                    cellZ in MINIMUM_Z..MAXIMUM_Z
+        }
+
+        internal const val X_BITS = 24
+        internal const val Y_BITS = 16
+        internal const val Z_BITS = 24
 
         private const val Y_MASK =
             (1L shl Y_BITS) - 1L

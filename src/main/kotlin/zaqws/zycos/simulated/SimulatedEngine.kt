@@ -39,6 +39,7 @@ import zaqws.zycos.simulated.system.SimulatedSystem
 import zaqws.zycos.simulated.system.SimulatedSystemContext
 import zaqws.zycos.simulated.spatial.SimulatedEntityQuery
 import zaqws.zycos.simulated.spatial.SimulatedInterestIndex
+import zaqws.zycos.simulated.spatial.SimulatedSpatialCell
 import zaqws.zycos.simulated.spatial.SimulatedSpatialIndex
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
@@ -306,6 +307,9 @@ class SimulatedEngine internal constructor(
     val isClosed: Boolean
         get() = lifecycleState.get() == LifecycleState.CLOSED
 
+    val isOperational: Boolean
+        get() = lifecycleState.get().let { it == LifecycleState.CREATED || it == LifecycleState.RUNNING }
+
     val entityCount: Int
         get() = latestFrame.size
 
@@ -384,11 +388,13 @@ class SimulatedEngine internal constructor(
             when (lifecycleState.get()) {
                 LifecycleState.CREATED -> {
                     lifecycleState.set(LifecycleState.STOPPED)
+                    projectileManager.close()
                 }
 
                 LifecycleState.RUNNING -> {
                     lifecycleState.set(LifecycleState.STOPPED)
                     simulationJob?.cancel()
+                    projectileManager.close()
                 }
 
                 LifecycleState.STOPPED,
@@ -404,9 +410,13 @@ class SimulatedEngine internal constructor(
             .apply(block)
             .build()
 
+        require(SimulatedSpatialCell.isValidPosition(data.position, config.spatialCellSize)) {
+            "Spawn position ${data.position} exceeds spatial bounds for cell size ${config.spatialCellSize}"
+        }
+
         return synchronized(spawnLock) {
-            check(!isClosed) {
-                "SimulatedEngine is closed"
+            check(isOperational) {
+                "SimulatedEngine is not operational (state: ${lifecycleState.get()})"
             }
 
             val entityId = allocateEntityId()
@@ -486,8 +496,8 @@ class SimulatedEngine internal constructor(
     fun submitExternalFrame(
         frame: SimulatedExternalFrame
     ): Boolean {
-        check(!isClosed) {
-            "SimulatedEngine is closed"
+        check(isOperational) {
+            "SimulatedEngine is not operational (state: ${lifecycleState.get()})"
         }
 
         while (true) {
@@ -586,6 +596,7 @@ class SimulatedEngine internal constructor(
     override fun remove(
         entityId: SimulatedEntityId
     ) {
+        if (!isOperational) return
         if (!knownEntityIds.remove(entityId.value)) return
 
         entityDefinitions.remove(entityId.value)
@@ -601,7 +612,12 @@ class SimulatedEngine internal constructor(
         yaw: Float?,
         pitch: Float?
     ) {
+        if (!isOperational) return
         if (!exists(entityId)) return
+
+        require(SimulatedSpatialCell.isValidPosition(position, config.spatialCellSize)) {
+            "Teleport position $position exceeds spatial bounds for cell size ${config.spatialCellSize}"
+        }
 
         commandQueue.offer(
             SimulatedCommand.Teleport(
@@ -617,6 +633,7 @@ class SimulatedEngine internal constructor(
         entityId: SimulatedEntityId,
         velocity: SimulatedVector3
     ) {
+        if (!isOperational) return
         if (!exists(entityId)) return
 
         commandQueue.offer(
@@ -631,6 +648,7 @@ class SimulatedEngine internal constructor(
         entityId: SimulatedEntityId,
         velocity: SimulatedVector3
     ) {
+        if (!isOperational) return
         if (!exists(entityId)) return
 
         commandQueue.offer(
@@ -645,6 +663,7 @@ class SimulatedEngine internal constructor(
         entityId: SimulatedEntityId,
         amount: Double
     ) {
+        if (!isOperational) return
         if (!exists(entityId)) return
 
         commandQueue.offer(
@@ -659,6 +678,7 @@ class SimulatedEngine internal constructor(
         entityId: SimulatedEntityId,
         amount: Double
     ) {
+        if (!isOperational) return
         if (!exists(entityId)) return
 
         commandQueue.offer(
@@ -673,6 +693,7 @@ class SimulatedEngine internal constructor(
         entityId: SimulatedEntityId,
         team: SimulatedTeam
     ) {
+        if (!isOperational) return
         if (!exists(entityId)) return
 
         commandQueue.offer(
@@ -687,6 +708,7 @@ class SimulatedEngine internal constructor(
         entityId: SimulatedEntityId,
         presentationId: SimulatedPresentationId
     ) {
+        if (!isOperational) return
         if (!exists(entityId)) return
 
         commandQueue.offer(

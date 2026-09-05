@@ -77,7 +77,7 @@ internal class SimulatedNavigationService(
 
         latestRequestIds[entityId.value] = requestId
 
-        pathCache.get(request)?.let {
+        pathCache.get(map, request)?.let {
             results.offer(it)
             return requestId
         }
@@ -111,7 +111,7 @@ internal class SimulatedNavigationService(
     }
 
     fun invalidateCache() {
-        pathCache.invalidateBefore(map.revision)
+        pathCache.invalidateBefore(map, map.revision)
     }
 
     private fun pollResult(): SimulatedPathResult? {
@@ -139,7 +139,7 @@ internal class SimulatedNavigationService(
             return
         }
 
-        pathCache.get(request)?.let {
+        pathCache.get(map, request)?.let {
             offerResultIfCurrent(it)
             return
         }
@@ -147,7 +147,7 @@ internal class SimulatedNavigationService(
         val result = pathfinder.findPath(map, request)
 
         if (map.revision == request.mapRevision) {
-            pathCache.put(request, result)
+            pathCache.put(map, request, result)
         }
 
         offerResultIfCurrent(result)

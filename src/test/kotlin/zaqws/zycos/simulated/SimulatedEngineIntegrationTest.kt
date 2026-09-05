@@ -3,6 +3,7 @@ package zaqws.zycos.simulated
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
 import zaqws.zycos.simulated.entity.SimulatedEntity
@@ -225,6 +226,61 @@ class SimulatedEngineIntegrationTest {
                     }
                 }
             )
+        } finally {
+            engine.close()
+        }
+    }
+
+    @Test
+    fun stoppedEngineRejectsUnusableWork() {
+        val engine = SimulatedEngineBuilder(TestSimulatedMapFactory.create())
+            .config(SimulatedConfig())
+            .build()
+        engine.start()
+        engine.stop()
+
+        assertThrows<IllegalStateException> {
+            engine.spawn {
+                position(SimulatedVector3.ZERO)
+            }
+        }
+
+        assertThrows<IllegalStateException> {
+            engine.submitExternalFrame(
+                SimulatedExternalFrame(
+                    sequence = 1L,
+                    actors = emptyList()
+                )
+            )
+        }
+
+        engine.close()
+    }
+
+    @Test
+    fun spatialBoundsEnforcedOnSpawnAndTeleport() {
+        val engine = SimulatedEngineBuilder(TestSimulatedMapFactory.create())
+            .config(SimulatedConfig(spatialCellSize = 0.5))
+            .build()
+        try {
+            assertThrows<IllegalArgumentException> {
+                engine.spawn {
+                    position(SimulatedVector3(20_000_000.0, 64.0, 20_000_000.0))
+                }
+            }
+
+            val entity = engine.spawn {
+                position(SimulatedVector3(500_000.0, 64.0, 500_000.0))
+            }
+
+            assertThrows<IllegalArgumentException> {
+                engine.teleport(
+                    entity.entityId,
+                    SimulatedVector3(20_000_000.0, 64.0, 20_000_000.0),
+                    null,
+                    null
+                )
+            }
         } finally {
             engine.close()
         }

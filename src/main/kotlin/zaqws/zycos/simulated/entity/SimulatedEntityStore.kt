@@ -34,6 +34,10 @@ internal class SimulatedEntityStore(
     private var steeringVelocityX = DoubleArray(capacity)
     private var steeringVelocityZ = DoubleArray(capacity)
 
+    private var movementVelocityX = DoubleArray(capacity)
+    private var movementVelocityY = DoubleArray(capacity)
+    private var movementVelocityZ = DoubleArray(capacity)
+
     private var yaw = FloatArray(capacity)
     private var pitch = FloatArray(capacity)
 
@@ -109,6 +113,10 @@ internal class SimulatedEntityStore(
         velocityY[slot] = velocity.y
         velocityZ[slot] = velocity.z
 
+        movementVelocityX[slot] = velocity.x
+        movementVelocityY[slot] = velocity.y
+        movementVelocityZ[slot] = velocity.z
+
         this.yaw[slot] = yaw
         this.pitch[slot] = pitch
 
@@ -166,6 +174,10 @@ internal class SimulatedEntityStore(
 
         steeringVelocityX.fill(0.0, 0, size)
         steeringVelocityZ.fill(0.0, 0, size)
+
+        movementVelocityX.fill(0.0, 0, size)
+        movementVelocityY.fill(0.0, 0, size)
+        movementVelocityZ.fill(0.0, 0, size)
 
         yaw.fill(0.0f, 0, size)
         pitch.fill(0.0f, 0, size)
@@ -247,17 +259,17 @@ internal class SimulatedEntityStore(
             endIndex = size
         )
 
-        this.velocityX.copyInto(
+        this.movementVelocityX.copyInto(
             velocityX,
             endIndex = size
         )
 
-        this.velocityY.copyInto(
+        this.movementVelocityY.copyInto(
             velocityY,
             endIndex = size
         )
 
-        this.velocityZ.copyInto(
+        this.movementVelocityZ.copyInto(
             velocityZ,
             endIndex = size
         )
@@ -396,6 +408,32 @@ internal class SimulatedEntityStore(
             0.0,
             steeringVelocityZ[slot]
         )
+    }
+
+    fun movementVelocity(slot: Int): SimulatedVector3 {
+        requireValidSlot(slot)
+
+        return SimulatedVector3(
+            movementVelocityX[slot],
+            movementVelocityY[slot],
+            movementVelocityZ[slot]
+        )
+    }
+
+    fun setMovementVelocity(
+        slot: Int,
+        x: Double,
+        y: Double,
+        z: Double
+    ) {
+        requireValidSlot(slot)
+        require(x.isFinite())
+        require(y.isFinite())
+        require(z.isFinite())
+
+        movementVelocityX[slot] = x
+        movementVelocityY[slot] = y
+        movementVelocityZ[slot] = z
     }
 
     fun setVelocity(
@@ -745,6 +783,10 @@ internal class SimulatedEntityStore(
         steeringVelocityX = steeringVelocityX.copyOf(capacity)
         steeringVelocityZ = steeringVelocityZ.copyOf(capacity)
 
+        movementVelocityX = movementVelocityX.copyOf(capacity)
+        movementVelocityY = movementVelocityY.copyOf(capacity)
+        movementVelocityZ = movementVelocityZ.copyOf(capacity)
+
         yaw = yaw.copyOf(capacity)
         pitch = pitch.copyOf(capacity)
 
@@ -784,6 +826,10 @@ internal class SimulatedEntityStore(
         steeringVelocityX[destinationSlot] = steeringVelocityX[sourceSlot]
         steeringVelocityZ[destinationSlot] = steeringVelocityZ[sourceSlot]
 
+        movementVelocityX[destinationSlot] = movementVelocityX[sourceSlot]
+        movementVelocityY[destinationSlot] = movementVelocityY[sourceSlot]
+        movementVelocityZ[destinationSlot] = movementVelocityZ[sourceSlot]
+
         yaw[destinationSlot] = yaw[sourceSlot]
         pitch[destinationSlot] = pitch[sourceSlot]
 
@@ -819,6 +865,10 @@ internal class SimulatedEntityStore(
 
         steeringVelocityX[slot] = 0.0
         steeringVelocityZ[slot] = 0.0
+
+        movementVelocityX[slot] = 0.0
+        movementVelocityY[slot] = 0.0
+        movementVelocityZ[slot] = 0.0
 
         yaw[slot] = 0.0f
         pitch[slot] = 0.0f

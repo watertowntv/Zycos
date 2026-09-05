@@ -34,14 +34,21 @@ class SimulatedEntityQueryTest {
     }
 
     @Test
-    fun `spatial cell packs coordinates beyond 8 million without overflow`() {
+    fun `spatial cell packs coordinates covering +-1 million range without overflow`() {
         val cell = SimulatedSpatialCell(
-            x = 10_000_000,
+            x = 2_000_000,
             y = 120,
-            z = -10_000_000
+            z = -2_000_000
         )
         val packed = SimulatedSpatialCell.pack(cell)
         org.junit.jupiter.api.Assertions.assertNotEquals(0L, packed)
+
+        org.junit.jupiter.api.Assertions.assertTrue(
+            SimulatedSpatialCell.isValidPosition(SimulatedVector3(1_000_000.0, 100.0, -1_000_000.0), 0.5)
+        )
+        org.junit.jupiter.api.Assertions.assertFalse(
+            SimulatedSpatialCell.isValidPosition(SimulatedVector3(10_000_000.0, 100.0, 0.0), 0.5)
+        )
     }
 
     @Test

@@ -250,6 +250,8 @@ internal class SimulatedSpatialIndex(
         slot: Int,
         position: SimulatedVector3
     ) {
+        if (!SimulatedSpatialCell.isValidPosition(position, cellSize)) return
+
         val cell =
             SimulatedSpatialCell.from(
                 position,

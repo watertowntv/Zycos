@@ -10,7 +10,9 @@ data class SimulatedConfig(
     val maximumQueuedEvents: Int = DEFAULT_MAXIMUM_QUEUED_EVENTS,
     val maximumQueuedExternalActions: Int =
         DEFAULT_MAXIMUM_QUEUED_EXTERNAL_ACTIONS,
+    @Deprecated("Configured per Goal or target selector entry", level = DeprecationLevel.WARNING)
     val goalIntervalTicks: Int = DEFAULT_GOAL_INTERVAL_TICKS,
+    @Deprecated("Configured per Goal or target selector entry", level = DeprecationLevel.WARNING)
     val targetSearchIntervalTicks: Int = DEFAULT_TARGET_SEARCH_INTERVAL_TICKS,
     val fullSimulationRadius: Double = DEFAULT_FULL_SIMULATION_RADIUS,
     val spatialCellSize: Double = DEFAULT_SPATIAL_CELL_SIZE,

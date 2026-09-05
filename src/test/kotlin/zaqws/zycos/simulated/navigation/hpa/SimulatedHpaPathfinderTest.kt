@@ -32,7 +32,7 @@ class SimulatedHpaPathfinderTest {
                 profile
             )
 
-        assertEquals(1, graph.portalCount)
+        assertEquals(1, graph!!.portalCount)
     }
 
     @Test

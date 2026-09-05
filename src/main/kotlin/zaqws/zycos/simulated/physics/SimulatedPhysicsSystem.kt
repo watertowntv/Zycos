@@ -187,6 +187,13 @@ internal class SimulatedPhysicsSystem(
                 onGround
             )
 
+        entityStore.setMovementVelocity(
+            slot,
+            nextPosition.x - position.x,
+            nextPosition.y - position.y,
+            nextPosition.z - position.z
+        )
+
         entityStore.setPosition(
             slot,
             nextPosition

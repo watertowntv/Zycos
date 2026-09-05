@@ -75,13 +75,22 @@ class SimulatedHpaGraph private constructor(
     }
 
     companion object {
+        private const val MAXIMUM_BUILD_RETRIES = 3
+
         fun build(
             map: SimulatedMap,
             traversalProfile:
             SimulatedTraversalProfile
-        ): SimulatedHpaGraph {
-            val expectedMapRevision =
-                map.revision
+        ): SimulatedHpaGraph? {
+            var attempt = 0
+            while (attempt < MAXIMUM_BUILD_RETRIES) {
+                if (Thread.currentThread().isInterrupted) {
+                    return null
+                }
+                attempt++
+
+                val expectedMapRevision =
+                    map.revision
 
             val clusterPortals =
                 Long2ObjectOpenHashMap<
@@ -229,29 +238,27 @@ class SimulatedHpaGraph private constructor(
             }
 
             if (
-                map.revision !=
+                map.revision ==
                 expectedMapRevision
             ) {
-                return build(
-                    map,
-                    traversalProfile
+                return SimulatedHpaGraph(
+                    mapRevision =
+                        expectedMapRevision,
+
+                    traversalProfile =
+                        traversalProfile,
+
+                    clusters =
+                        clusters,
+
+                    portals =
+                        portals
                 )
             }
-
-            return SimulatedHpaGraph(
-                mapRevision =
-                    expectedMapRevision,
-
-                traversalProfile =
-                    traversalProfile,
-
-                clusters =
-                    clusters,
-
-                portals =
-                    portals
-            )
         }
+
+        return null
+    }
 
         internal fun clusterId(
             chunkX: Int,
