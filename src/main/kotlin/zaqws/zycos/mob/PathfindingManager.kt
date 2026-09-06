@@ -23,6 +23,7 @@ import org.bukkit.World
 import org.bukkit.entity.Mob
 import org.bukkit.event.EventHandler
 import org.bukkit.event.EventPriority
+import org.bukkit.event.HandlerList
 import org.bukkit.event.Listener
 import org.bukkit.event.block.BlockBreakEvent
 import org.bukkit.event.block.BlockPlaceEvent
@@ -45,7 +46,21 @@ import kotlin.math.ceil
 import kotlin.math.max
 import kotlin.math.min
 
-class PathfindingManager {
+data class MobPathfindingProfile(
+    val mobHeight: Int = 2,
+    val mobWidth: Double = 0.6,
+    val maxStepUp: Int = 1,
+    val maxStepDown: Int = 3
+) {
+    init {
+        require(mobHeight > 0)
+        require(mobWidth > 0.0)
+        require(maxStepUp >= 0)
+        require(maxStepDown >= 0)
+    }
+}
+
+internal class PathfindingManager {
     companion object {
         private const val STRAIGHT_MOVEMENT_COST = 1.0
         private const val DIAGONAL_MOVEMENT_COST = 1.4142135623730951
@@ -97,20 +112,6 @@ class PathfindingManager {
         }
     }
 
-    data class NavigationProfile(
-        val mobHeight: Int = 2,
-        val mobWidth: Double = 0.6,
-        val maxStepUp: Int = 1,
-        val maxStepDown: Int = 3
-    ) {
-        init {
-            require(mobHeight > 0)
-            require(mobWidth > 0.0)
-            require(maxStepUp >= 0)
-            require(maxStepDown >= 0)
-        }
-    }
-
     data class AbstractEdge(
         val targetEntranceId: Long,
         val cost: Double
@@ -135,7 +136,7 @@ class PathfindingManager {
 
     class HierarchicalGrid(
         val area: AreaManager.Area,
-        val navigationProfile: NavigationProfile = NavigationProfile()
+        val mobPathfindingProfile: MobPathfindingProfile = MobPathfindingProfile()
     ) {
         val hierarchicalLock = ReentrantReadWriteLock()
         val clusters = hashMapOf<Long, Cluster>()
@@ -254,7 +255,7 @@ class PathfindingManager {
     class LocalPathfinder(
         var chunkSnapshots: Long2ObjectMap<ChunkSnapshot>,
         private val limitToCurrentChunk: Boolean = false,
-        private val navigationProfile: NavigationProfile = NavigationProfile(),
+        private val mobPathfindingProfile: MobPathfindingProfile = MobPathfindingProfile(),
         private val minimumWorldHeight: Int = DEFAULT_MINIMUM_WORLD_HEIGHT,
         private val maximumWorldHeight: Int = DEFAULT_MAXIMUM_WORLD_HEIGHT
     ) {
@@ -271,7 +272,7 @@ class PathfindingManager {
             defaultReturnValue(-1L)
         }
         private val pathListCache = LongArrayList()
-        private val blockRadius = if (navigationProfile.mobWidth * 0.5 <= 0.5) 0 else 1
+        private val blockRadius = if (mobPathfindingProfile.mobWidth * 0.5 <= 0.5) 0 else 1
 
         private var lastChunkKey = Long.MIN_VALUE
         private var lastSnapshot: ChunkSnapshot? = null
@@ -382,7 +383,7 @@ class PathfindingManager {
 
             if (deltaX !in -1..1 || deltaZ !in -1..1) return false
             if (deltaX == 0 && deltaZ == 0) return false
-            if (deltaY > navigationProfile.maxStepUp || deltaY < -navigationProfile.maxStepDown) return false
+            if (deltaY > mobPathfindingProfile.maxStepUp || deltaY < -mobPathfindingProfile.maxStepDown) return false
             if (limitToCurrentChunk && (target.chunkX != current.chunkX || target.chunkZ != current.chunkZ)) return false
             if (!isWalkable(current, target)) return false
             if (deltaX != 0 && deltaZ != 0 && isDiagonalBlocked(current, deltaX, deltaZ, target.y)) return false
@@ -391,13 +392,13 @@ class PathfindingManager {
         }
 
         fun isStandable(position: AreaManager.Position): Boolean {
-            if (!isReadableY(position.y - 1) || !isReadableY(position.y + navigationProfile.mobHeight - 1)) {
+            if (!isReadableY(position.y - 1) || !isReadableY(position.y + mobPathfindingProfile.mobHeight - 1)) {
                 return false
             }
 
             for (deltaZ in -blockRadius..blockRadius) {
                 for (deltaX in -blockRadius..blockRadius) {
-                    for (blockY in position.y until position.y + navigationProfile.mobHeight) {
+                    for (blockY in position.y until position.y + mobPathfindingProfile.mobHeight) {
                         if (getBlockMaterial(position.x + deltaX, blockY, position.z + deltaZ).isSolid) {
                             return false
                         }
@@ -428,7 +429,7 @@ class PathfindingManager {
                 val deltaX = DELTA_X_OFFSETS[directionIndex]
                 val deltaZ = DELTA_Z_OFFSETS[directionIndex]
 
-                for (deltaY in navigationProfile.maxStepUp downTo -navigationProfile.maxStepDown) {
+                for (deltaY in mobPathfindingProfile.maxStepUp downTo -mobPathfindingProfile.maxStepDown) {
                     val target = AreaManager.Position(
                         current.x + deltaX,
                         current.y + deltaY,
@@ -475,7 +476,7 @@ class PathfindingManager {
             target: AreaManager.Position
         ): Boolean {
             val minimumBodyY = min(current.y, target.y)
-            val maximumBodyY = max(current.y, target.y) + navigationProfile.mobHeight - 1
+            val maximumBodyY = max(current.y, target.y) + mobPathfindingProfile.mobHeight - 1
 
             if (!isReadableY(target.y - 1) || !isReadableY(maximumBodyY)) return false
 
@@ -492,8 +493,8 @@ class PathfindingManager {
             if (!getBlockMaterial(target.x, target.y - 1, target.z).isSolid) return false
 
             if (target.y > current.y) {
-                val minimumClearanceY = current.y + navigationProfile.mobHeight
-                val maximumClearanceY = target.y + navigationProfile.mobHeight - 1
+                val minimumClearanceY = current.y + mobPathfindingProfile.mobHeight
+                val maximumClearanceY = target.y + mobPathfindingProfile.mobHeight - 1
                 if (!isReadableY(minimumClearanceY) || !isReadableY(maximumClearanceY)) return false
 
                 for (deltaZ in -blockRadius..blockRadius) {
@@ -518,7 +519,7 @@ class PathfindingManager {
             targetY: Int
         ): Boolean {
             val minimumHeight = min(current.y, targetY)
-            val maximumHeight = max(current.y, targetY) + navigationProfile.mobHeight - 1
+            val maximumHeight = max(current.y, targetY) + mobPathfindingProfile.mobHeight - 1
 
             if (!isReadableY(minimumHeight) || !isReadableY(maximumHeight)) return true
 
@@ -577,16 +578,16 @@ class PathfindingManager {
         fun getOrCreateGrid(
             identifier: String,
             area: AreaManager.Area,
-            navigationProfile: NavigationProfile = NavigationProfile()
+            mobPathfindingProfile: MobPathfindingProfile = MobPathfindingProfile()
         ): HierarchicalGrid = gridRegistryMap.computeIfAbsent(identifier) {
-            HierarchicalGrid(area, navigationProfile)
+            HierarchicalGrid(area, mobPathfindingProfile)
         }
 
         fun registerGrid(
             identifier: String,
             area: AreaManager.Area,
-            navigationProfile: NavigationProfile = NavigationProfile()
-        ): HierarchicalGrid = HierarchicalGrid(area, navigationProfile).also {
+            mobPathfindingProfile: MobPathfindingProfile = MobPathfindingProfile()
+        ): HierarchicalGrid = HierarchicalGrid(area, mobPathfindingProfile).also {
             gridRegistryMap[identifier] = it
         }
 
@@ -667,7 +668,7 @@ class PathfindingManager {
                 val localPathfinder = LocalPathfinder(
                     chunkSnapshots,
                     limitToCurrentChunk = true,
-                    navigationProfile = hierarchicalGrid.navigationProfile,
+                    mobPathfindingProfile = hierarchicalGrid.mobPathfindingProfile,
                     minimumWorldHeight = minimumWorldHeight,
                     maximumWorldHeight = maximumWorldHeight
                 )
@@ -746,7 +747,7 @@ class PathfindingManager {
                         val localPathfinder = LocalPathfinder(
                             neighborSnapshots,
                             limitToCurrentChunk = true,
-                            navigationProfile = hierarchicalGrid.navigationProfile,
+                            mobPathfindingProfile = hierarchicalGrid.mobPathfindingProfile,
                             minimumWorldHeight = world.minHeight,
                             maximumWorldHeight = world.maxHeight
                         )
@@ -789,7 +790,7 @@ class PathfindingManager {
             val transitionPathfinder = LocalPathfinder(
                 snapshots,
                 limitToCurrentChunk = false,
-                navigationProfile = grid.navigationProfile,
+                mobPathfindingProfile = grid.mobPathfindingProfile,
                 minimumWorldHeight = minimumWorldHeight,
                 maximumWorldHeight = maximumWorldHeight
             )
@@ -820,7 +821,7 @@ class PathfindingManager {
             borderStartX: Int,
             borderStartZ: Int
         ) {
-            val profile = grid.navigationProfile
+            val profile = grid.mobPathfindingProfile
 
             for (sourceY in grid.area.boundingBoxStart.y..grid.area.boundingBoxEnd.y) {
                 for (deltaY in profile.maxStepUp downTo -profile.maxStepDown) {
@@ -1050,7 +1051,7 @@ class PathfindingManager {
             val localPathfinder = LocalPathfinder(
                 chunkSnapshots,
                 limitToCurrentChunk = true,
-                navigationProfile = grid.navigationProfile,
+                mobPathfindingProfile = grid.mobPathfindingProfile,
                 minimumWorldHeight = minimumWorldHeight,
                 maximumWorldHeight = maximumWorldHeight
             )
@@ -1320,10 +1321,10 @@ class PathfindingManager {
             private set
 
         init {
-            require(mobHeight <= hierarchicalGrid.navigationProfile.mobHeight) {
+            require(mobHeight <= hierarchicalGrid.mobPathfindingProfile.mobHeight) {
                 "The hierarchical grid navigation profile is shorter than the mob."
             }
-            require(mobWidth <= hierarchicalGrid.navigationProfile.mobWidth + COST_EPSILON) {
+            require(mobWidth <= hierarchicalGrid.mobPathfindingProfile.mobWidth + COST_EPSILON) {
                 "The hierarchical grid navigation profile is narrower than the mob."
             }
         }
@@ -1402,11 +1403,11 @@ class PathfindingManager {
             val pathfinder = LocalPathfinder(
                 snapshots,
                 limitToCurrentChunk = false,
-                navigationProfile = NavigationProfile(
+                mobPathfindingProfile = MobPathfindingProfile(
                     mobHeight = mobHeight,
                     mobWidth = mobWidth,
-                    maxStepUp = hierarchicalGrid.navigationProfile.maxStepUp,
-                    maxStepDown = hierarchicalGrid.navigationProfile.maxStepDown
+                    maxStepUp = hierarchicalGrid.mobPathfindingProfile.maxStepUp,
+                    maxStepDown = hierarchicalGrid.mobPathfindingProfile.maxStepDown
                 ),
                 minimumWorldHeight = entity.world.minHeight,
                 maximumWorldHeight = entity.world.maxHeight
@@ -1622,6 +1623,11 @@ class PathfindingManager {
         private val hierarchicalGrid: HierarchicalGrid
     ) : Listener {
         private val rebuildJobs = ConcurrentHashMap<Long, Job>()
+
+        fun unregister() {
+            rebuildJobs.clear()
+            HandlerList.unregisterAll(this)
+        }
 
         private fun updateGridAt(location: Location) {
             val position = location.toPosition()
