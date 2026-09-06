@@ -46,3 +46,4 @@ copy.bat
 .idea/
 .kotlin/
 .paperweight/
+src/test/
