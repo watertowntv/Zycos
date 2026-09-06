@@ -31,6 +31,7 @@ import zaqws.zycos.simulated.physics.SimulatedPhysicsSystem
 import zaqws.zycos.simulated.projectile.SimulatedProjectileRemovalReason
 import zaqws.zycos.simulated.projectile.SimulatedProjectileEvent
 import zaqws.zycos.simulated.projectile.SimulatedProjectileManager
+import zaqws.zycos.simulated.projectile.SimulatedProjectileId
 import zaqws.zycos.simulated.projectile.SimulatedProjectileSource
 import zaqws.zycos.simulated.projectile.SimulatedProjectileSpawnData
 import zaqws.zycos.simulated.projectile.SimulatedProjectileDefinition
@@ -87,6 +88,67 @@ class SimulatedRound4RegressionTest {
             }
         }
         assertEquals(0, engine.projectileManager.size)
+    }
+
+    @Test
+    fun saturatedCommandQueueRejectsEntitySpawnWithoutLeakingIdentity() {
+        val engine = SimulatedEngineBuilder(TestSimulatedMapFactory.create())
+            .config(
+                SimulatedConfig(
+                    maximumQueuedCommands = 1,
+                    navigationWorkerCount = 1
+                )
+            )
+            .build()
+
+        try {
+            val accepted = engine.spawn {
+                position(SimulatedVector3(2.5, 1.0, 2.5))
+            }
+
+            assertThrows<IllegalStateException> {
+                engine.spawn {
+                    position(SimulatedVector3(3.5, 1.0, 2.5))
+                }
+            }
+
+            assertTrue(engine.exists(accepted.entityId))
+            assertFalse(engine.exists(SimulatedEntityId(2)))
+        } finally {
+            engine.close()
+        }
+    }
+
+    @Test
+    fun saturatedCommandQueueRejectsProjectileSpawnWithoutLeakingIdentity() {
+        val engine = SimulatedEngineBuilder(TestSimulatedMapFactory.create())
+            .config(
+                SimulatedConfig(
+                    maximumQueuedCommands = 1,
+                    navigationWorkerCount = 1
+                )
+            )
+            .build()
+
+        try {
+            engine.spawn {
+                position(SimulatedVector3(2.5, 1.0, 2.5))
+            }
+
+            assertThrows<IllegalStateException> {
+                engine.projectileManager.spawn {
+                    position(SimulatedVector3(2.5, 2.0, 2.5))
+                }
+            }
+
+            assertFalse(
+                engine.projectileManager.exists(
+                    SimulatedProjectileId(1)
+                )
+            )
+        } finally {
+            engine.close()
+        }
     }
 
     @Test

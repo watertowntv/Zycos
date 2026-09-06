@@ -7,7 +7,7 @@ import zaqws.zycos.simulated.entity.SimulatedTeam
 import zaqws.zycos.simulated.math.SimulatedVector3
 import zaqws.zycos.simulated.projectile.SimulatedProjectileId
 import zaqws.zycos.simulated.projectile.SimulatedProjectileSpawnData
-import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.ArrayBlockingQueue
 
 internal sealed interface SimulatedCommand {
     data class Spawn(
@@ -81,8 +81,12 @@ internal sealed interface SimulatedCommand {
     ) : SimulatedCommand
 }
 
-internal class SimulatedCommandQueue {
-    private val queue = ConcurrentLinkedQueue<SimulatedCommand>()
+internal class SimulatedCommandQueue(maximumCommands: Int) {
+    private val queue = ArrayBlockingQueue<SimulatedCommand>(maximumCommands)
+
+    init {
+        require(maximumCommands > 0)
+    }
 
     fun offer(command: SimulatedCommand): Boolean {
         return queue.offer(command)

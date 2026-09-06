@@ -40,6 +40,7 @@ import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import net.kyori.adventure.title.Title
 import net.kyori.adventure.title.Title.Times
 import org.bukkit.*
+import org.bukkit.attribute.Attributable
 import org.bukkit.attribute.Attribute
 import org.bukkit.block.BlockFace
 import org.bukkit.block.BlockType
@@ -1330,7 +1331,7 @@ fun World.spawnBlockDisplay(
 /**
  * Reset attributes
  */
-fun Player.clearAllAttributeModifiers() {
+fun Attributable.clearAllAttributeModifiers() {
     Registry.ATTRIBUTE.forEach { attribute ->
         this.getAttribute(attribute)?.let { instance ->
             instance.modifiers.forEach { modifier ->
@@ -1352,7 +1353,7 @@ fun Entity.hideExcept(player: Player) {
 }
 
 /**
- * Attribute Helper
+ * BaseValue
  */
 var LivingEntity.maximumHealth: Double
     get() = getAttribute(Attribute.MAX_HEALTH)?.baseValue ?: 0.0
@@ -1364,23 +1365,18 @@ var LivingEntity.maximumHealth: Double
         }
     }
 
-/**
- * Attribute Helper
- */
-val LivingEntity.attackDamage: Double
-    get() = getAttribute(Attribute.ATTACK_DAMAGE)?.value ?: 0.0
 
-/**
- * Attribute Helper
- */
-val LivingEntity.attackSpeed: Double
-    get() = getAttribute(Attribute.ATTACK_SPEED)?.value ?: 0.0
+var LivingEntity.attackDamage: Double
+    get() = getAttribute(Attribute.ATTACK_DAMAGE)?.baseValue ?: 0.0
+    set(value) = getAttribute(Attribute.ATTACK_DAMAGE)?.baseValue = value
+var LivingEntity.attackSpeed: Double
+    get() = getAttribute(Attribute.ATTACK_SPEED)?.baseValue ?: 0.0
+    set(value) = getAttribute(Attribute.ATTACK_SPEED)?.baseValue = value
+var LivingEntity.attackRange: Double
+    get() = getAttribute(Attribute.ENTITY_INTERACTION_RANGE)?.baseValue ?: 0.0
+    set(value) = getAttribute(Attribute.ENTITY_INTERACTION_RANGE)?.baseValue = value
 
-/**
- * Attribute Helper
- */
-val LivingEntity.attackRange: Double
-    get() = getAttribute(Attribute.ENTITY_INTERACTION_RANGE)?.value ?: 0.0
+
 
 /**
  * Audience Helper
@@ -2255,12 +2251,6 @@ fun AreaManager.Area.toList() = listOf(
     boundingBoxStart.x, boundingBoxStart.y, boundingBoxStart.z,
     boundingBoxEnd.x, boundingBoxEnd.y, boundingBoxEnd.z
 )
-
-fun <T: Comparable<T>> binaryListOf() =
-    BinaryList(emptyList<T>(), compareBy { it })
-
-fun <T: Comparable<T>> binaryListOf(vararg elements: T) =
-    BinaryList(elements.toMutableList(), compareBy { it })
 
 //endregion
 

@@ -6,13 +6,11 @@ data class SimulatedConfig(
     val initialEntityCapacity: Int = DEFAULT_INITIAL_ENTITY_CAPACITY,
     val initialProjectileCapacity: Int =
         DEFAULT_INITIAL_PROJECTILE_CAPACITY,
+    val maximumQueuedCommands: Int = DEFAULT_MAXIMUM_QUEUED_COMMANDS,
     val maximumCommandsPerTick: Int = DEFAULT_MAXIMUM_COMMANDS_PER_TICK,
     val maximumQueuedEvents: Int = DEFAULT_MAXIMUM_QUEUED_EVENTS,
     val maximumQueuedExternalActions: Int =
         DEFAULT_MAXIMUM_QUEUED_EXTERNAL_ACTIONS,
-    val goalIntervalTicks: Int = DEFAULT_GOAL_INTERVAL_TICKS,
-    val targetSearchIntervalTicks: Int = DEFAULT_TARGET_SEARCH_INTERVAL_TICKS,
-    val fullSimulationRadius: Double = DEFAULT_FULL_SIMULATION_RADIUS,
     val spatialCellSize: Double = DEFAULT_SPATIAL_CELL_SIZE,
     val gravityPerTick: Double = DEFAULT_GRAVITY_PER_TICK,
     val airDrag: Double = DEFAULT_AIR_DRAG,
@@ -32,14 +30,10 @@ data class SimulatedConfig(
 
         const val DEFAULT_INITIAL_ENTITY_CAPACITY = 512
         const val DEFAULT_INITIAL_PROJECTILE_CAPACITY = 128
+        const val DEFAULT_MAXIMUM_QUEUED_COMMANDS = 100_000
         const val DEFAULT_MAXIMUM_COMMANDS_PER_TICK = 100_000
         const val DEFAULT_MAXIMUM_QUEUED_EVENTS = 16_384
         const val DEFAULT_MAXIMUM_QUEUED_EXTERNAL_ACTIONS = 8_192
-
-        const val DEFAULT_GOAL_INTERVAL_TICKS = 4
-        const val DEFAULT_TARGET_SEARCH_INTERVAL_TICKS = 5
-
-        const val DEFAULT_FULL_SIMULATION_RADIUS = 96.0
         const val DEFAULT_SPATIAL_CELL_SIZE = 4.0
 
         const val DEFAULT_GRAVITY_PER_TICK = -0.08
@@ -64,14 +58,10 @@ data class SimulatedConfig(
         require(maximumCatchUpTicks >= 0)
         require(initialEntityCapacity > 0)
         require(initialProjectileCapacity > 0)
+        require(maximumQueuedCommands > 0)
         require(maximumCommandsPerTick > 0)
         require(maximumQueuedEvents > 0)
         require(maximumQueuedExternalActions > 0)
-
-        require(goalIntervalTicks > 0)
-        require(targetSearchIntervalTicks > 0)
-        require(fullSimulationRadius.isFinite())
-        require(fullSimulationRadius >= 0.0)
 
         require(spatialCellSize.isFinite())
         require(spatialCellSize >= 0.5)

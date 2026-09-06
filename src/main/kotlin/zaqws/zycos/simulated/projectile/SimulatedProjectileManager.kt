@@ -241,23 +241,20 @@ class SimulatedProjectileManager internal constructor(
     override fun remove(
         projectileId: SimulatedProjectileId
     ) {
-        if (
-            !knownProjectileIds.remove(
-                projectileId.value
-            )
-        ) {
+        if (!exists(projectileId)) {
             return
         }
 
-        definitions.remove(
-            projectileId.value
-        )
-
-        commandConsumer(
-            SimulatedCommand.RemoveProjectile(
-                projectileId
+        check(
+            commandConsumer(
+                SimulatedCommand.RemoveProjectile(
+                    projectileId
+                )
             )
-        )
+        ) { "SimulatedEngine cannot accept more commands" }
+
+        knownProjectileIds.remove(projectileId.value)
+        definitions.remove(projectileId.value)
     }
 
     override fun teleport(
@@ -269,12 +266,14 @@ class SimulatedProjectileManager internal constructor(
             "Teleport position $position exceeds spatial bounds for cell size ${spatialIndex.cellSize}"
         }
 
-        commandConsumer(
-            SimulatedCommand.TeleportProjectile(
-                projectileId,
-                position
+        check(
+            commandConsumer(
+                SimulatedCommand.TeleportProjectile(
+                    projectileId,
+                    position
+                )
             )
-        )
+        ) { "SimulatedEngine cannot accept more commands" }
     }
 
     override fun setVelocity(
@@ -283,12 +282,14 @@ class SimulatedProjectileManager internal constructor(
     ) {
         if (!exists(projectileId)) return
 
-        commandConsumer(
-            SimulatedCommand.SetProjectileVelocity(
-                projectileId,
-                velocity
+        check(
+            commandConsumer(
+                SimulatedCommand.SetProjectileVelocity(
+                    projectileId,
+                    velocity
+                )
             )
-        )
+        ) { "SimulatedEngine cannot accept more commands" }
     }
 
     override fun addVelocity(
@@ -297,12 +298,14 @@ class SimulatedProjectileManager internal constructor(
     ) {
         if (!exists(projectileId)) return
 
-        commandConsumer(
-            SimulatedCommand.AddProjectileVelocity(
-                projectileId,
-                velocity
+        check(
+            commandConsumer(
+                SimulatedCommand.AddProjectileVelocity(
+                    projectileId,
+                    velocity
+                )
             )
-        )
+        ) { "SimulatedEngine cannot accept more commands" }
     }
 
     internal fun spawnNow(

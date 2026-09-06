@@ -17,8 +17,7 @@ internal class SimulatedSeparationSystem(
     private val entityStore: SimulatedEntityStore,
     private val spatialIndex: SimulatedSpatialIndex,
     private val config: SimulatedPhysicsConfig =
-        SimulatedPhysicsConfig.DEFAULT,
-    private val requireFullSimulation: Boolean = true
+        SimulatedPhysicsConfig.DEFAULT
 ) : SimulatedSystem {
     override fun update(
         context: SimulatedSystemContext
@@ -275,16 +274,6 @@ internal class SimulatedSeparationSystem(
             entityStore.hasFlag(
                 slot,
                 SimulatedEntityFlag.NO_ENTITY_COLLISION
-            )
-        ) {
-            return false
-        }
-
-        if (
-            requireFullSimulation &&
-            !entityStore.hasFlag(
-                slot,
-                SimulatedEntityFlag.FULL_SIMULATION
             )
         ) {
             return false

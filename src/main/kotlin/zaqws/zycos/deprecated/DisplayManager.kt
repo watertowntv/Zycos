@@ -1,6 +1,6 @@
 @file:Suppress("unused")
 
-package zaqws.zycos
+package zaqws.zycos.deprecated
 
 import org.bukkit.Location
 import org.bukkit.Material
@@ -8,6 +8,11 @@ import org.bukkit.block.data.BlockData
 import org.bukkit.entity.BlockDisplay
 import org.bukkit.util.Transformation
 import org.joml.Vector3f
+import zaqws.zycos.AreaManager
+import zaqws.zycos.Main
+import zaqws.zycos.clone
+import zaqws.zycos.overworld
+import zaqws.zycos.toPosition
 
 @Deprecated("Not Used")
 object DisplayManager {

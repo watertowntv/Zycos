@@ -1,9 +1,10 @@
 @file:Suppress("unused")
 
-package zaqws.zycos
+package zaqws.zycos.deprecated
 
 import java.util.*
 
+@Deprecated("Not Used")
 class BinaryList<T> : AbstractMutableList<T>, RandomAccess {
     private val list: ArrayList<T>
     private val comparator: Comparator<T>

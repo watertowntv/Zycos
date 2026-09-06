@@ -38,7 +38,6 @@ import zaqws.zycos.simulated.snapshot.SimulatedFramePublisher
 import zaqws.zycos.simulated.system.SimulatedSystem
 import zaqws.zycos.simulated.system.SimulatedSystemContext
 import zaqws.zycos.simulated.spatial.SimulatedEntityQuery
-import zaqws.zycos.simulated.spatial.SimulatedInterestIndex
 import zaqws.zycos.simulated.spatial.SimulatedSpatialCell
 import zaqws.zycos.simulated.spatial.SimulatedSpatialIndex
 import java.util.concurrent.ConcurrentHashMap
@@ -93,7 +92,10 @@ class SimulatedEngine internal constructor(
     private val knownEntityIds = ConcurrentHashMap.newKeySet<Int>()
     private val entityDefinitions = ConcurrentHashMap<Int, SimulatedEntityDefinition>()
 
-    private val commandQueue = SimulatedCommandQueue()
+    private val commandQueue =
+        SimulatedCommandQueue(
+            config.maximumQueuedCommands
+        )
     private val framePublisher = SimulatedFramePublisher()
     private val eventQueue =
         SimulatedEventQueue(
@@ -183,11 +185,6 @@ class SimulatedEngine internal constructor(
             spatialIndex
         )
 
-    private val interestIndex =
-        SimulatedInterestIndex(
-            config.fullSimulationRadius
-        )
-
     private val goalSystem =
         SimulatedGoalSystem(
             entityStore,
@@ -237,9 +234,7 @@ class SimulatedEngine internal constructor(
             entityStore = entityStore,
             spatialIndex = spatialIndex,
             commandConsumer = { command ->
-                enqueueIfOperational {
-                    commandQueue.offer(command)
-                }
+                offerCommandIfOperational(command)
             },
             damageConsumer =
                 ::applyProjectileDamage,
@@ -281,8 +276,7 @@ class SimulatedEngine internal constructor(
     private val separationSystem = SimulatedSeparationSystem(
         entityStore = entityStore,
         spatialIndex = spatialIndex,
-        config = physicsConfig,
-        requireFullSimulation = false
+        config = physicsConfig
     )
 
     private val customSystems = ArrayList<SimulatedSystem>()
@@ -355,6 +349,14 @@ class SimulatedEngine internal constructor(
                 operation()
                 true
             }
+        }
+
+    private fun offerCommandIfOperational(
+        command: SimulatedCommand
+    ): Boolean =
+        synchronized(lifecycleLock) {
+            isOperational &&
+                    commandQueue.offer(command)
         }
 
     fun start(): SimulatedEngine {
@@ -631,11 +633,15 @@ class SimulatedEngine internal constructor(
         entityId: SimulatedEntityId
     ) {
         enqueueIfOperational {
-            if (!knownEntityIds.remove(entityId.value)) return@enqueueIfOperational
+            if (!exists(entityId)) return@enqueueIfOperational
+            check(
+                commandQueue.offer(
+                    SimulatedCommand.Remove(entityId)
+                )
+            ) { "Command queue capacity exceeded" }
+
+            knownEntityIds.remove(entityId.value)
             entityDefinitions.remove(entityId.value)
-            commandQueue.offer(
-                SimulatedCommand.Remove(entityId)
-            )
         }
     }
 
@@ -651,14 +657,16 @@ class SimulatedEngine internal constructor(
 
         enqueueIfOperational {
             if (!exists(entityId)) return@enqueueIfOperational
-            commandQueue.offer(
-                SimulatedCommand.Teleport(
-                    entityId,
-                    position,
-                    yaw,
-                    pitch
+            check(
+                commandQueue.offer(
+                    SimulatedCommand.Teleport(
+                        entityId,
+                        position,
+                        yaw,
+                        pitch
+                    )
                 )
-            )
+            ) { "Command queue capacity exceeded" }
         }
     }
 
@@ -668,12 +676,14 @@ class SimulatedEngine internal constructor(
     ) {
         enqueueIfOperational {
             if (!exists(entityId)) return@enqueueIfOperational
-            commandQueue.offer(
-                SimulatedCommand.SetVelocity(
-                    entityId,
-                    velocity
+            check(
+                commandQueue.offer(
+                    SimulatedCommand.SetVelocity(
+                        entityId,
+                        velocity
+                    )
                 )
-            )
+            ) { "Command queue capacity exceeded" }
         }
     }
 
@@ -683,12 +693,14 @@ class SimulatedEngine internal constructor(
     ) {
         enqueueIfOperational {
             if (!exists(entityId)) return@enqueueIfOperational
-            commandQueue.offer(
-                SimulatedCommand.AddVelocity(
-                    entityId,
-                    velocity
+            check(
+                commandQueue.offer(
+                    SimulatedCommand.AddVelocity(
+                        entityId,
+                        velocity
+                    )
                 )
-            )
+            ) { "Command queue capacity exceeded" }
         }
     }
 
@@ -698,12 +710,14 @@ class SimulatedEngine internal constructor(
     ) {
         enqueueIfOperational {
             if (!exists(entityId)) return@enqueueIfOperational
-            commandQueue.offer(
-                SimulatedCommand.Damage(
-                    entityId,
-                    amount
+            check(
+                commandQueue.offer(
+                    SimulatedCommand.Damage(
+                        entityId,
+                        amount
+                    )
                 )
-            )
+            ) { "Command queue capacity exceeded" }
         }
     }
 
@@ -713,12 +727,14 @@ class SimulatedEngine internal constructor(
     ) {
         enqueueIfOperational {
             if (!exists(entityId)) return@enqueueIfOperational
-            commandQueue.offer(
-                SimulatedCommand.Heal(
-                    entityId,
-                    amount
+            check(
+                commandQueue.offer(
+                    SimulatedCommand.Heal(
+                        entityId,
+                        amount
+                    )
                 )
-            )
+            ) { "Command queue capacity exceeded" }
         }
     }
 
@@ -728,12 +744,14 @@ class SimulatedEngine internal constructor(
     ) {
         enqueueIfOperational {
             if (!exists(entityId)) return@enqueueIfOperational
-            commandQueue.offer(
-                SimulatedCommand.SetTeam(
-                    entityId,
-                    team
+            check(
+                commandQueue.offer(
+                    SimulatedCommand.SetTeam(
+                        entityId,
+                        team
+                    )
                 )
-            )
+            ) { "Command queue capacity exceeded" }
         }
     }
 
@@ -743,12 +761,14 @@ class SimulatedEngine internal constructor(
     ) {
         enqueueIfOperational {
             if (!exists(entityId)) return@enqueueIfOperational
-            commandQueue.offer(
-                SimulatedCommand.SetPresentation(
-                    entityId,
-                    presentationId
+            check(
+                commandQueue.offer(
+                    SimulatedCommand.SetPresentation(
+                        entityId,
+                        presentationId
+                    )
                 )
-            )
+            ) { "Command queue capacity exceeded" }
         }
     }
 
@@ -835,8 +855,6 @@ class SimulatedEngine internal constructor(
         )
 
         spatialIndex.rebuild(entityStore)
-        interestIndex.rebuild(currentExternalFrame)
-        interestIndex.updateEntitySimulationFlags(entityStore)
         projectileManager.update(
             currentTick,
             currentExternalFrame

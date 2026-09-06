@@ -78,6 +78,11 @@ object SimulatedVerificationMain {
             `projectile lifetime and range remove with exact reasons`()
         }
 
+        SimulatedRound4RegressionTest().apply {
+            saturatedCommandQueueRejectsEntitySpawnWithoutLeakingIdentity()
+            saturatedCommandQueueRejectsProjectileSpawnWithoutLeakingIdentity()
+        }
+
         SimulatedScaleSmokeTest()
             .`five thousand entities publish frames without engine failure`()
 

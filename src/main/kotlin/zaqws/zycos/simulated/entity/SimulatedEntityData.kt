@@ -123,7 +123,6 @@ enum class SimulatedEntityFlag(internal val mask: Long) {
     ON_GROUND(1L shl 0),
     REMOVED(1L shl 1),
     DEAD(1L shl 2),
-    FULL_SIMULATION(1L shl 3),
     NO_GRAVITY(1L shl 4),
     NO_BLOCK_COLLISION(1L shl 5),
     NO_ENTITY_COLLISION(1L shl 6)
@@ -150,6 +149,4 @@ data class SimulatedEntitySnapshot(
     val isOnGround: Boolean
         get() = SimulatedEntityFlag.ON_GROUND in flags
 
-    val isFullSimulation: Boolean
-        get() = SimulatedEntityFlag.FULL_SIMULATION in flags
 }

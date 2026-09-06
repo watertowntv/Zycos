@@ -69,7 +69,7 @@ class PaperPlayerBridge @JvmOverloads constructor(
         scheduledTask?.cancel()
         scheduledTask = null
 
-        if (!engine.isClosed && sequence < Long.MAX_VALUE) {
+        if (engine.isOperational && sequence < Long.MAX_VALUE) {
             engine.submitExternalFrame(
                 SimulatedExternalFrame(sequence++, emptyList())
             )
@@ -80,6 +80,10 @@ class PaperPlayerBridge @JvmOverloads constructor(
         check(!closed.get()) { "PaperPlayerBridge is closed" }
         check(plugin.server.isPrimaryThread) {
             "PaperPlayerBridge.update must be called from the server thread"
+        }
+        if (!engine.isOperational) {
+            stop()
+            return
         }
         check(sequence < Long.MAX_VALUE) {
             "Paper player frame sequence space exhausted"
