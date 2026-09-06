@@ -11,6 +11,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -28,6 +29,7 @@ import org.bukkit.event.Listener
 import org.bukkit.event.block.BlockBreakEvent
 import org.bukkit.event.block.BlockPlaceEvent
 import org.bukkit.event.world.ChunkLoadEvent
+import org.bukkit.event.world.ChunkUnloadEvent
 import org.bukkit.plugin.java.JavaPlugin
 import zaqws.zycos.AreaManager
 import zaqws.zycos.Constants
@@ -36,15 +38,16 @@ import zaqws.zycos.CoroutineManager.scope
 import zaqws.zycos.distanceSquared2D
 import zaqws.zycos.fastRemoveIf
 import zaqws.zycos.later
-import zaqws.zycos.sync
 import zaqws.zycos.toPosition
 import java.util.PriorityQueue
+import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.locks.ReentrantReadWriteLock
 import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.time.Duration.Companion.milliseconds
 
 data class MobPathfindingProfile(
     val mobHeight: Int = 2,
@@ -54,7 +57,7 @@ data class MobPathfindingProfile(
 ) {
     init {
         require(mobHeight > 0)
-        require(mobWidth > 0.0)
+        require(mobWidth.isFinite() && mobWidth > 0.0)
         require(maxStepUp >= 0)
         require(maxStepDown >= 0)
     }
@@ -139,6 +142,11 @@ internal class PathfindingManager {
         val mobPathfindingProfile: MobPathfindingProfile = MobPathfindingProfile()
     ) {
         val hierarchicalLock = ReentrantReadWriteLock()
+        internal val rebuildMutex = Mutex()
+        @Volatile
+        internal var active = true
+        @Volatile
+        internal var worldId: UUID? = null
         val clusters = hashMapOf<Long, Cluster>()
         val entrances = hashMapOf<Long, Entrance>()
 
@@ -180,6 +188,7 @@ internal class PathfindingManager {
         }
 
         fun clear() {
+            active = false
             hierarchicalLock.writeLock().lock()
 
             try {
@@ -272,7 +281,7 @@ internal class PathfindingManager {
             defaultReturnValue(-1L)
         }
         private val pathListCache = LongArrayList()
-        private val blockRadius = if (mobPathfindingProfile.mobWidth * 0.5 <= 0.5) 0 else 1
+        private val blockRadius = ceil((mobPathfindingProfile.mobWidth - 1.0) * 0.5).toInt().coerceAtLeast(0)
 
         private var lastChunkKey = Long.MIN_VALUE
         private var lastSnapshot: ChunkSnapshot? = null
@@ -292,10 +301,12 @@ internal class PathfindingManager {
             maxNodes: Int = Int.MAX_VALUE,
             cancellationJob: Job? = null
         ): LongArray {
-            if (start.raw == end.raw) return longArrayOf(start.raw)
             if (start !in area || end !in area) return LongArray(0)
 
             resetSearchState()
+            cancellationJob?.ensureActive()
+            if (!isStandable(start) || !isStandable(end)) return LongArray(0)
+            if (start.raw == end.raw) return longArrayOf(start.raw)
 
             accumulatedCostMap[start.raw] = 0.0
             openSet.add(PathNode(start.raw, calculateHeuristic(start, end)))
@@ -340,6 +351,8 @@ internal class PathfindingManager {
             val remainingTargets = HashSet<Long>(entranceIds.size)
             remainingTargets.addAll(entranceIds)
             resetSearchState()
+            cancellationJob?.ensureActive()
+            if (!isStandable(start)) return results
 
             accumulatedCostMap[start.raw] = 0.0
             openSet.add(PathNode(start.raw, 0.0))
@@ -461,8 +474,9 @@ internal class PathfindingManager {
             pathListCache.clear()
 
             var currentRaw = endRaw
-            while (currentRaw != -1L) {
+            while (true) {
                 pathListCache.add(currentRaw)
+                if (!parentMap.containsKey(currentRaw)) break
                 currentRaw = parentMap.get(currentRaw)
             }
 
@@ -523,16 +537,20 @@ internal class PathfindingManager {
 
             if (!isReadableY(minimumHeight) || !isReadableY(maximumHeight)) return true
 
-            for (blockY in minimumHeight..maximumHeight) {
-                if (getBlockMaterial(current.x + deltaX, blockY, current.z).isSolid) return true
-                if (getBlockMaterial(current.x, blockY, current.z + deltaZ).isSolid) return true
+            for (offsetZ in -blockRadius..blockRadius) {
+                for (offsetX in -blockRadius..blockRadius) {
+                    for (blockY in minimumHeight..maximumHeight) {
+                        if (getBlockMaterial(current.x + deltaX + offsetX, blockY, current.z + offsetZ).isSolid) return true
+                        if (getBlockMaterial(current.x + offsetX, blockY, current.z + deltaZ + offsetZ).isSolid) return true
+                    }
+                }
             }
 
             return false
         }
 
         private fun getBlockMaterial(globalX: Int, globalY: Int, globalZ: Int): Material {
-            if (!isReadableY(globalY)) return Material.AIR
+            if (!isReadableY(globalY)) return Material.BEDROCK
 
             val chunkKey = getChunkKey(
                 globalX shr Constants.CHUNK_SHIFT,
@@ -546,7 +564,7 @@ internal class PathfindingManager {
                 lastSnapshot = snapshot
             }
 
-            return snapshot?.getBlockType(globalX and 15, globalY, globalZ and 15) ?: Material.AIR
+            return snapshot?.getBlockType(globalX and 15, globalY, globalZ and 15) ?: Material.BEDROCK
         }
 
         private fun isReadableY(globalY: Int): Boolean =
@@ -559,11 +577,8 @@ internal class PathfindingManager {
     }
 
     class GridRegistry {
-        private companion object {
-            const val CHUNK_LOCK_COUNT = 1024
-            val AFFECTED_CHUNK_DELTA_X = intArrayOf(0, 1, -1, 0, 0, 1, 1, -1, -1)
-            val AFFECTED_CHUNK_DELTA_Z = intArrayOf(0, 0, 0, 1, -1, 1, -1, 1, -1)
-        }
+        private class AreaSnapshots(val worldId: UUID, expectedChunkCount: Int) :
+            Long2ObjectOpenHashMap<ChunkSnapshot>(expectedChunkCount)
 
         private data class BorderTransition(
             val source: AreaManager.Position,
@@ -573,7 +588,6 @@ internal class PathfindingManager {
         )
 
         private val gridRegistryMap = ConcurrentHashMap<String, HierarchicalGrid>()
-        private val chunkLocks = Array(CHUNK_LOCK_COUNT) { Mutex() }
 
         fun getOrCreateGrid(
             identifier: String,
@@ -588,13 +602,14 @@ internal class PathfindingManager {
             area: AreaManager.Area,
             mobPathfindingProfile: MobPathfindingProfile = MobPathfindingProfile()
         ): HierarchicalGrid = HierarchicalGrid(area, mobPathfindingProfile).also {
-            gridRegistryMap[identifier] = it
+            gridRegistryMap.put(identifier, it)?.clear()
         }
 
         fun removeGrid(identifier: String): HierarchicalGrid? =
-            gridRegistryMap.remove(identifier)
+            gridRegistryMap.remove(identifier)?.also { it.clear() }
 
         fun clear() {
+            gridRegistryMap.values.forEach { it.clear() }
             gridRegistryMap.clear()
         }
 
@@ -602,12 +617,12 @@ internal class PathfindingManager {
             world: World,
             area: AreaManager.Area
         ): Long2ObjectMap<ChunkSnapshot> {
-            val minimumChunkX = area.boundingBoxStart.chunkX
-            val maximumChunkX = area.boundingBoxEnd.chunkX
-            val minimumChunkZ = area.boundingBoxStart.chunkZ
-            val maximumChunkZ = area.boundingBoxEnd.chunkZ
+            val minimumChunkX = area.boundingBoxStart.chunkX - 1
+            val maximumChunkX = area.boundingBoxEnd.chunkX + 1
+            val minimumChunkZ = area.boundingBoxStart.chunkZ - 1
+            val maximumChunkZ = area.boundingBoxEnd.chunkZ + 1
             val expectedChunkCount = (maximumChunkX - minimumChunkX + 1) * (maximumChunkZ - minimumChunkZ + 1)
-            val snapshots = Long2ObjectOpenHashMap<ChunkSnapshot>(expectedChunkCount)
+            val snapshots = AreaSnapshots(world.uid, expectedChunkCount)
 
             for (chunkX in minimumChunkX..maximumChunkX) {
                 for (chunkZ in minimumChunkZ..maximumChunkZ) {
@@ -622,12 +637,13 @@ internal class PathfindingManager {
         fun captureNeighborSnapshots(
             world: World,
             centerChunkX: Int,
-            centerChunkZ: Int
+            centerChunkZ: Int,
+            radius: Int = 1
         ): Long2ObjectMap<ChunkSnapshot> {
             val snapshots = Long2ObjectOpenHashMap<ChunkSnapshot>(9)
 
-            for (deltaX in -1..1) {
-                for (deltaZ in -1..1) {
+            for (deltaX in -radius..radius) {
+                for (deltaZ in -radius..radius) {
                     val targetChunkX = centerChunkX + deltaX
                     val targetChunkZ = centerChunkZ + deltaZ
 
@@ -645,45 +661,47 @@ internal class PathfindingManager {
             chunkSnapshots: Long2ObjectMap<ChunkSnapshot>,
             minimumWorldHeight: Int = DEFAULT_MINIMUM_WORLD_HEIGHT,
             maximumWorldHeight: Int = DEFAULT_MAXIMUM_WORLD_HEIGHT
-        ) = withContext(Dispatchers.Default) {
-            hierarchicalGrid.hierarchicalLock.writeLock().lock()
+        ) = hierarchicalGrid.rebuildMutex.withLock {
+            withContext(Dispatchers.Default) {
+                hierarchicalGrid.hierarchicalLock.writeLock().lock()
 
-            try {
-                hierarchicalGrid.clearUnsafe()
+                try {
+                    ensureActive()
+                    if (!hierarchicalGrid.active) return@withContext
+                    hierarchicalGrid.worldId = (chunkSnapshots as? AreaSnapshots)?.worldId
+                    hierarchicalGrid.clearUnsafe()
 
-                val area = hierarchicalGrid.area
-                for (chunkX in area.boundingBoxStart.chunkX..area.boundingBoxEnd.chunkX) {
-                    for (chunkZ in area.boundingBoxStart.chunkZ..area.boundingBoxEnd.chunkZ) {
-                        scanChunkBorders(
+                    val area = hierarchicalGrid.area
+                    for (chunkX in area.boundingBoxStart.chunkX..area.boundingBoxEnd.chunkX) {
+                        for (chunkZ in area.boundingBoxStart.chunkZ..area.boundingBoxEnd.chunkZ) {
+                            scanChunkBorders(
+                                hierarchicalGrid,
+                                chunkX,
+                                chunkZ,
+                                chunkSnapshots,
+                                minimumWorldHeight,
+                                maximumWorldHeight
+                            )
+                        }
+                    }
+
+                    val localPathfinder = LocalPathfinder(
+                        chunkSnapshots,
+                        limitToCurrentChunk = true,
+                        mobPathfindingProfile = hierarchicalGrid.mobPathfindingProfile,
+                        minimumWorldHeight = minimumWorldHeight,
+                        maximumWorldHeight = maximumWorldHeight
+                    )
+                    for (cluster in hierarchicalGrid.clusters.values) {
+                        bakeIntraEdges(
                             hierarchicalGrid,
-                            chunkX,
-                            chunkZ,
-                            chunkSnapshots,
-                            minimumWorldHeight,
-                            maximumWorldHeight
+                            cluster,
+                            localPathfinder
                         )
                     }
+                } finally {
+                    hierarchicalGrid.hierarchicalLock.writeLock().unlock()
                 }
-
-                val localPathfinder = LocalPathfinder(
-                    chunkSnapshots,
-                    limitToCurrentChunk = true,
-                    mobPathfindingProfile = hierarchicalGrid.mobPathfindingProfile,
-                    minimumWorldHeight = minimumWorldHeight,
-                    maximumWorldHeight = maximumWorldHeight
-                )
-                val cancellationJob = coroutineContext[Job]
-
-                for (cluster in hierarchicalGrid.clusters.values) {
-                    bakeIntraEdges(
-                        hierarchicalGrid,
-                        cluster,
-                        localPathfinder,
-                        cancellationJob
-                    )
-                }
-            } finally {
-                hierarchicalGrid.hierarchicalLock.writeLock().unlock()
             }
         }
 
@@ -694,55 +712,38 @@ internal class PathfindingManager {
             world: World,
             plugin: JavaPlugin
         ) {
-            val chunkKey = getChunkKey(chunkX, chunkZ)
-            val mixedHash = (chunkKey xor (chunkKey ushr 32)).toInt()
-            val positiveHash = if (mixedHash == Int.MIN_VALUE) 0 else abs(mixedHash)
-            val mutex = chunkLocks[positiveHash % CHUNK_LOCK_COUNT]
-
-            mutex.withLock {
+            hierarchicalGrid.rebuildMutex.withLock {
+                if (!hierarchicalGrid.active || hierarchicalGrid.worldId != world.uid) return
+                val affectedRadius = max(1, ceil((hierarchicalGrid.mobPathfindingProfile.mobWidth - 1.0) / 32.0).toInt())
+                val scanRadius = affectedRadius + 1
                 val neighborSnapshots = withContext(CoroutineManager.PaperDispatcher(plugin)) {
-                    captureNeighborSnapshots(world, chunkX, chunkZ)
+                    captureNeighborSnapshots(world, chunkX, chunkZ, scanRadius + affectedRadius)
                 }
-                if (!neighborSnapshots.containsKey(chunkKey)) return
 
                 withContext(Dispatchers.Default) {
                     hierarchicalGrid.hierarchicalLock.writeLock().lock()
 
                     try {
-                        hierarchicalGrid.clearClusterData(chunkX, chunkZ)
+                        ensureActive()
+                        if (!hierarchicalGrid.active) return@withContext
+                        for (deltaX in -affectedRadius..affectedRadius) {
+                            for (deltaZ in -affectedRadius..affectedRadius) {
+                                hierarchicalGrid.clearClusterData(chunkX + deltaX, chunkZ + deltaZ)
+                            }
+                        }
 
-                        scanChunkBorders(
-                            hierarchicalGrid,
-                            chunkX,
-                            chunkZ,
-                            neighborSnapshots,
-                            world.minHeight,
-                            world.maxHeight
-                        )
-                        scanChunkBorders(
-                            hierarchicalGrid,
-                            chunkX - 1,
-                            chunkZ,
-                            neighborSnapshots,
-                            world.minHeight,
-                            world.maxHeight
-                        )
-                        scanChunkBorders(
-                            hierarchicalGrid,
-                            chunkX,
-                            chunkZ - 1,
-                            neighborSnapshots,
-                            world.minHeight,
-                            world.maxHeight
-                        )
-                        scanChunkBorders(
-                            hierarchicalGrid,
-                            chunkX - 1,
-                            chunkZ - 1,
-                            neighborSnapshots,
-                            world.minHeight,
-                            world.maxHeight
-                        )
+                        for (deltaX in -scanRadius..scanRadius) {
+                            for (deltaZ in -scanRadius..scanRadius) {
+                                scanChunkBorders(
+                                    hierarchicalGrid,
+                                    chunkX + deltaX,
+                                    chunkZ + deltaZ,
+                                    neighborSnapshots,
+                                    world.minHeight,
+                                    world.maxHeight
+                                )
+                            }
+                        }
 
                         val localPathfinder = LocalPathfinder(
                             neighborSnapshots,
@@ -751,21 +752,14 @@ internal class PathfindingManager {
                             minimumWorldHeight = world.minHeight,
                             maximumWorldHeight = world.maxHeight
                         )
-                        val cancellationJob = coroutineContext[Job]
+                        for (deltaX in -scanRadius..scanRadius) {
+                            for (deltaZ in -scanRadius..scanRadius) {
+                                val cluster = hierarchicalGrid.clusters[
+                                    getChunkKey(chunkX + deltaX, chunkZ + deltaZ)
+                                ] ?: continue
 
-                        for (index in AFFECTED_CHUNK_DELTA_X.indices) {
-                            val affectedChunkX = chunkX + AFFECTED_CHUNK_DELTA_X[index]
-                            val affectedChunkZ = chunkZ + AFFECTED_CHUNK_DELTA_Z[index]
-                            val cluster = hierarchicalGrid.clusters[
-                                getChunkKey(affectedChunkX, affectedChunkZ)
-                            ] ?: continue
-
-                            bakeIntraEdges(
-                                hierarchicalGrid,
-                                cluster,
-                                localPathfinder,
-                                cancellationJob
-                            )
+                                bakeIntraEdges(hierarchicalGrid, cluster, localPathfinder)
+                            }
                         }
                     } finally {
                         hierarchicalGrid.hierarchicalLock.writeLock().unlock()
@@ -782,6 +776,9 @@ internal class PathfindingManager {
             minimumWorldHeight: Int,
             maximumWorldHeight: Int
         ) {
+            if (chunkX !in grid.area.boundingBoxStart.chunkX..grid.area.boundingBoxEnd.chunkX ||
+                chunkZ !in grid.area.boundingBoxStart.chunkZ..grid.area.boundingBoxEnd.chunkZ
+            ) return
             if (!snapshots.containsKey(getChunkKey(chunkX, chunkZ))) return
 
             val currentCluster = grid.getOrCreateCluster(chunkX, chunkZ)
@@ -824,7 +821,7 @@ internal class PathfindingManager {
             val profile = grid.mobPathfindingProfile
 
             for (sourceY in grid.area.boundingBoxStart.y..grid.area.boundingBoxEnd.y) {
-                for (deltaY in profile.maxStepUp downTo -profile.maxStepDown) {
+                for (deltaY in max(profile.maxStepUp, profile.maxStepDown) downTo -max(profile.maxStepUp, profile.maxStepDown)) {
                     for (transverseDelta in -1..1) {
                         var runStartOffset = -1
                         var runTransition: BorderTransition? = null
@@ -996,8 +993,7 @@ internal class PathfindingManager {
         private fun bakeIntraEdges(
             grid: HierarchicalGrid,
             cluster: Cluster,
-            pathfinder: LocalPathfinder,
-            cancellationJob: Job?
+            pathfinder: LocalPathfinder
         ) {
             val entranceIds = cluster.entranceIds
             if (entranceIds.isEmpty()) return
@@ -1013,8 +1009,7 @@ internal class PathfindingManager {
                 val costs = pathfinder.findCostsToAllEntrances(
                     sourceEntrance.position,
                     entranceIds,
-                    grid.area,
-                    cancellationJob
+                    grid.area
                 )
 
                 for (targetEntranceId in entranceIds) {
@@ -1044,7 +1039,7 @@ internal class PathfindingManager {
             minimumWorldHeight: Int = DEFAULT_MINIMUM_WORLD_HEIGHT,
             maximumWorldHeight: Int = DEFAULT_MAXIMUM_WORLD_HEIGHT
         ): LongArray = withContext(Dispatchers.Default) {
-            if (source.raw == target.raw) return@withContext longArrayOf(source.raw)
+            if (!grid.active) return@withContext LongArray(0)
             if (source !in grid.area || target !in grid.area) return@withContext LongArray(0)
 
             val cancellationJob = coroutineContext[Job]
@@ -1055,13 +1050,16 @@ internal class PathfindingManager {
                 minimumWorldHeight = minimumWorldHeight,
                 maximumWorldHeight = maximumWorldHeight
             )
+            if (!localPathfinder.isStandable(source) || !localPathfinder.isStandable(target)) {
+                return@withContext LongArray(0)
+            }
+            if (source.raw == target.raw) return@withContext longArrayOf(source.raw)
 
             if (source.chunkX == target.chunkX && source.chunkZ == target.chunkZ) {
                 val directPath = localPathfinder.findPath(
                     source,
                     target,
                     grid.area,
-                    maxNodes = 256,
                     cancellationJob = cancellationJob
                 )
 
@@ -1091,12 +1089,12 @@ internal class PathfindingManager {
                     val currentRecord = openSet.poll()
                     val currentPositionRaw = currentRecord.positionRaw
                     val currentAccumulatedCost = accumulatedCostMap.get(currentPositionRaw)
-                    val currentEntrance = if (currentPositionRaw == source.raw) {
-                        null
-                    } else {
-                        grid.entrances[currentPositionRaw] ?: continue
+                    val currentEntrance = grid.entrances[currentPositionRaw]
+                    val currentPosition = when (currentPositionRaw) {
+                        source.raw -> source
+                        target.raw -> target
+                        else -> currentEntrance?.position ?: continue
                     }
-                    val currentPosition = currentEntrance?.position ?: source
                     val expectedTotalCost = currentAccumulatedCost + calculateHeuristic(currentPosition, target)
 
                     if (currentRecord.estimatedTotalCost > expectedTotalCost + COST_EPSILON) continue
@@ -1118,7 +1116,6 @@ internal class PathfindingManager {
                                 openSet
                             )
                         }
-                        continue
                     }
 
                     if (currentEntrance != null &&
@@ -1269,8 +1266,9 @@ internal class PathfindingManager {
             val pathList = LongArrayList()
             var currentRaw = targetPositionRaw
 
-            while (currentRaw != -1L) {
+            while (true) {
                 pathList.add(currentRaw)
+                if (!navigationParentMap.containsKey(currentRaw)) break
                 currentRaw = navigationParentMap.get(currentRaw)
             }
 
@@ -1293,11 +1291,15 @@ internal class PathfindingManager {
             const val WAYPOINT_REACHED_DISTANCE = 0.8
             const val WAYPOINT_REACHED_DISTANCE_SQUARED = WAYPOINT_REACHED_DISTANCE * WAYPOINT_REACHED_DISTANCE
             const val FAILURE_RETRY_DELAY_MILLISECONDS = 1000L
+            const val NAVIGATION_TICK_MILLISECONDS = 50L
+            const val STUCK_TIMEOUT_NANOSECONDS = 10_000_000_000L
+            const val MINIMUM_PROGRESS_DISTANCE_SQUARED = 0.01
         }
 
         private val hierarchicalPathfinder = HierarchicalPathfinder()
         private val mobHeight = ceil(entity.height).toInt()
         private val mobWidth = entity.width
+        private val worldId = entity.world.uid
 
         private var macroPath: LongArray? = null
         private var localPath: LongArray? = null
@@ -1305,13 +1307,16 @@ internal class PathfindingManager {
         private var localIndex = 0
         private var searchJob: Job? = null
         private var localSearchJob: Job? = null
+        private var navigationJob: Job? = null
         private var lastTargetLocation: Location? = null
-        private var latestSnapshots: Long2ObjectMap<ChunkSnapshot>? = null
         private var lastFailureTime = 0L
         private var requestGeneration = 0L
+        private var lastProgressLocation = entity.location
+        private var lastProgressTime = System.nanoTime()
 
         var speed: Double = 1.0
             set(value) {
+                require(value.isFinite() && value > 0.0)
                 if (field == value) return
                 field = value
                 triggerMove()
@@ -1330,9 +1335,15 @@ internal class PathfindingManager {
         }
 
         fun navigateTo(targetLocation: Location) {
-            if (!entity.isValid || entity.isDead) return
+            if (!entity.isValid || entity.isDead || !hierarchicalGrid.active || entity.world.uid != worldId) {
+                stopNavigation()
+                return
+            }
 
-            if (targetLocation.world != entity.world || targetLocation.toPosition() !in hierarchicalGrid.area) {
+            if (targetLocation.world != entity.world ||
+                !targetLocation.x.isFinite() || !targetLocation.y.isFinite() || !targetLocation.z.isFinite() ||
+                targetLocation.toPosition() !in hierarchicalGrid.area
+            ) {
                 stopNavigation()
                 return
             }
@@ -1355,7 +1366,10 @@ internal class PathfindingManager {
 
             val activeMacroPath = macroPath
             if (activeMacroPath == null || macroIndex >= activeMacroPath.size) {
-                if (entity.location.distanceSquared(targetLocation) <= TARGET_REUSE_DISTANCE_SQUARED) return
+                if (!failed && entity.location.distanceSquared(targetLocation) <= TARGET_REUSE_DISTANCE_SQUARED) {
+                    stopNavigation()
+                    return
+                }
                 if (canRetryPathfinding()) {
                     requestPathAsync(
                         entity.location.toPosition(),
@@ -1367,20 +1381,33 @@ internal class PathfindingManager {
             }
 
             advanceLocalPathIfReached(targetLocation)
+            if (macroPath !== activeMacroPath) return
 
             if (localPath != null && localIndex < localPath!!.size) {
+                val nextNode = AreaManager.Position(localPath!![localIndex])
+                if (!entity.world.isChunkLoaded(nextNode.chunkX, nextNode.chunkZ)) {
+                    registerFailure()
+                    return
+                }
+                val location = entity.location
+                if (location.distanceSquared(lastProgressLocation) >= MINIMUM_PROGRESS_DISTANCE_SQUARED) {
+                    lastProgressLocation = location
+                    lastProgressTime = System.nanoTime()
+                } else if (System.nanoTime() - lastProgressTime >= STUCK_TIMEOUT_NANOSECONDS) {
+                    registerFailure()
+                    return
+                }
                 if (!entity.pathfinder.hasPath()) triggerMove()
                 return
             }
 
             if (macroIndex >= activeMacroPath.size - 1) {
-                macroPath = null
-                localPath = null
+                stopNavigation()
                 return
             }
 
             if (localSearchJob?.isActive == true) return
-            requestLocalPath(targetLocation, activeMacroPath)
+            requestLocalPath(activeMacroPath)
         }
 
         fun cancel() {
@@ -1388,7 +1415,6 @@ internal class PathfindingManager {
         }
 
         private fun requestLocalPath(
-            targetLocation: Location,
             activeMacroPath: LongArray
         ) {
             val currentChunkX = entity.location.blockX shr Constants.CHUNK_SHIFT
@@ -1417,7 +1443,7 @@ internal class PathfindingManager {
             val generation = requestGeneration
 
             localSearchJob?.cancel()
-            localSearchJob = scope.launch {
+            localSearchJob = scope.launch(CoroutineManager.PaperDispatcher(plugin)) {
                 val generatedPath = withContext(Dispatchers.Default) {
                     pathfinder.findPath(
                         sourcePosition,
@@ -1427,16 +1453,14 @@ internal class PathfindingManager {
                     )
                 }
 
-                sync {
-                    if (generation != requestGeneration) return@sync
-                    if (!entity.isValid || entity.isDead) return@sync
+                withContext(CoroutineManager.PaperDispatcher(plugin)) {
+                    if (generation != requestGeneration) return@withContext
+                    if (!entity.isValid || entity.isDead || entity.world.uid != worldId) return@withContext
+                    localSearchJob = null
 
                     if (generatedPath.isEmpty()) {
                         registerFailure()
-                        macroPath = null
-                        localPath = null
-                        latestSnapshots = null
-                        return@sync
+                        return@withContext
                     }
 
                     failed = false
@@ -1445,12 +1469,14 @@ internal class PathfindingManager {
                         macroIndex++
                         localPath = null
                         localIndex = 0
-                        navigateTo(targetLocation)
-                        return@sync
+                        navigateTo(lastTargetLocation ?: return@withContext)
+                        return@withContext
                     }
 
                     localPath = generatedPath
                     localIndex = 1
+                    lastProgressLocation = entity.location
+                    lastProgressTime = System.nanoTime()
                     triggerMove()
                 }
             }
@@ -1460,14 +1486,13 @@ internal class PathfindingManager {
             val activeLocalPath = localPath ?: return
             if (localIndex >= activeLocalPath.size) return
 
-            val currentPosition = entity.location.toPosition()
             val targetNodePosition = AreaManager.Position(activeLocalPath[localIndex])
             val targetNodeCenter = targetNodePosition
                 .toLocation(entity.world)
                 .add(0.5, 0.0, 0.5)
 
             if (entity.location.distanceSquared2D(targetNodeCenter) >= WAYPOINT_REACHED_DISTANCE_SQUARED ||
-                abs(currentPosition.y - targetNodePosition.y) > 1
+                abs(entity.location.y - targetNodePosition.y) >= 0.5
             ) {
                 return
             }
@@ -1491,17 +1516,6 @@ internal class PathfindingManager {
             nextChunkX: Int,
             nextChunkZ: Int
         ): Long2ObjectMap<ChunkSnapshot> {
-            val currentChunkKey = getChunkKey(currentChunkX, currentChunkZ)
-            val nextChunkKey = getChunkKey(nextChunkX, nextChunkZ)
-            val cachedSnapshots = latestSnapshots
-
-            if (cachedSnapshots != null &&
-                cachedSnapshots.containsKey(currentChunkKey) &&
-                cachedSnapshots.containsKey(nextChunkKey)
-            ) {
-                return cachedSnapshots
-            }
-
             return Long2ObjectOpenHashMap<ChunkSnapshot>(18).also { snapshots ->
                 snapshots.putAll(
                     gridRegistry.captureNeighborSnapshots(entity.world, currentChunkX, currentChunkZ)
@@ -1509,7 +1523,6 @@ internal class PathfindingManager {
                 snapshots.putAll(
                     gridRegistry.captureNeighborSnapshots(entity.world, nextChunkX, nextChunkZ)
                 )
-                latestSnapshots = snapshots
             }
         }
 
@@ -1521,7 +1534,11 @@ internal class PathfindingManager {
                 .toLocation(entity.world)
                 .add(0.5, 0.0, 0.5)
 
-            entity.pathfinder.moveTo(nextNodeLocation, speed)
+            if (!entity.world.isChunkLoaded(nextNodeLocation.blockX shr Constants.CHUNK_SHIFT, nextNodeLocation.blockZ shr Constants.CHUNK_SHIFT) ||
+                !entity.pathfinder.moveTo(nextNodeLocation, speed)
+            ) {
+                registerFailure()
+            }
         }
 
         private fun requestPathAsync(
@@ -1538,6 +1555,7 @@ internal class PathfindingManager {
             localSearchJob = null
 
             lastTargetLocation = targetLocation.clone()
+            entity.pathfinder.stopPathfinding()
             macroPath = null
             localPath = null
             macroIndex = 0
@@ -1558,9 +1576,16 @@ internal class PathfindingManager {
                     targetPosition.chunkZ
                 )
             )
-            latestSnapshots = snapshots
+            if (navigationJob?.isActive != true) {
+                navigationJob = scope.launch(CoroutineManager.PaperDispatcher(plugin)) {
+                    while (true) {
+                        delay(NAVIGATION_TICK_MILLISECONDS.milliseconds)
+                        navigateTo(lastTargetLocation ?: break)
+                    }
+                }
+            }
 
-            searchJob = scope.launch {
+            searchJob = scope.launch(CoroutineManager.PaperDispatcher(plugin)) {
                 val resultPath = hierarchicalPathfinder.findHierarchicalPath(
                     sourcePosition,
                     targetPosition,
@@ -1570,16 +1595,14 @@ internal class PathfindingManager {
                     entity.world.maxHeight
                 )
 
-                sync {
-                    if (generation != requestGeneration) return@sync
-                    if (!entity.isValid || entity.isDead) return@sync
+                withContext(CoroutineManager.PaperDispatcher(plugin)) {
+                    if (generation != requestGeneration) return@withContext
+                    if (!entity.isValid || entity.isDead || entity.world.uid != worldId) return@withContext
+                    searchJob = null
 
                     if (resultPath.isEmpty()) {
                         registerFailure()
-                        macroPath = null
-                        localPath = null
-                        latestSnapshots = null
-                        return@sync
+                        return@withContext
                     }
 
                     failed = false
@@ -1587,30 +1610,34 @@ internal class PathfindingManager {
                     macroIndex = 0
                     localPath = null
                     localIndex = 0
-                    navigateTo(targetLocation)
+                    navigateTo(lastTargetLocation ?: return@withContext)
                 }
             }
         }
 
         private fun registerFailure() {
             failed = true
-            lastFailureTime = System.currentTimeMillis()
+            lastFailureTime = System.nanoTime()
+            macroPath = null
+            localPath = null
+            entity.pathfinder.stopPathfinding()
         }
 
         private fun canRetryPathfinding(): Boolean =
-            !failed || System.currentTimeMillis() - lastFailureTime >= FAILURE_RETRY_DELAY_MILLISECONDS
+            !failed || System.nanoTime() - lastFailureTime >= FAILURE_RETRY_DELAY_MILLISECONDS * 1_000_000L
 
         private fun stopNavigation() {
             requestGeneration++
             searchJob?.cancel()
             localSearchJob?.cancel()
+            navigationJob?.cancel()
             searchJob = null
             localSearchJob = null
+            navigationJob = null
             macroPath = null
             localPath = null
             macroIndex = 0
             localIndex = 0
-            latestSnapshots = null
             lastTargetLocation = null
             failed = false
             entity.pathfinder.stopPathfinding()
@@ -1623,15 +1650,25 @@ internal class PathfindingManager {
         private val hierarchicalGrid: HierarchicalGrid
     ) : Listener {
         private val rebuildJobs = ConcurrentHashMap<Long, Job>()
+        private var registered = true
 
         fun unregister() {
+            registered = false
+            rebuildJobs.values.forEach { it.cancel() }
             rebuildJobs.clear()
             HandlerList.unregisterAll(this)
         }
 
         private fun updateGridAt(location: Location) {
+            if (!hierarchicalGrid.active || hierarchicalGrid.worldId != location.world.uid) return
             val position = location.toPosition()
-            if (position !in hierarchicalGrid.area) return
+            val area = hierarchicalGrid.area
+            val profile = hierarchicalGrid.mobPathfindingProfile
+            val radius = ceil((profile.mobWidth - 1.0) * 0.5).toInt().coerceAtLeast(0)
+            if (position.x !in area.boundingBoxStart.x - radius..area.boundingBoxEnd.x + radius ||
+                position.z !in area.boundingBoxStart.z - radius..area.boundingBoxEnd.z + radius ||
+                position.y !in area.boundingBoxStart.y - 1..< area.boundingBoxEnd.y + profile.mobHeight
+            ) return
 
             later {
                 requestChunkRebuild(
@@ -1647,6 +1684,7 @@ internal class PathfindingManager {
             chunkZ: Int,
             world: World
         ) {
+            if (!registered || !hierarchicalGrid.active || hierarchicalGrid.worldId != world.uid) return
             val chunkKey = getChunkKey(chunkX, chunkZ)
             rebuildJobs.remove(chunkKey)?.cancel()
 
@@ -1667,8 +1705,8 @@ internal class PathfindingManager {
         }
 
         private fun isChunkInsideArea(chunkX: Int, chunkZ: Int): Boolean =
-            chunkX in hierarchicalGrid.area.boundingBoxStart.chunkX..hierarchicalGrid.area.boundingBoxEnd.chunkX &&
-                    chunkZ in hierarchicalGrid.area.boundingBoxStart.chunkZ..hierarchicalGrid.area.boundingBoxEnd.chunkZ
+            chunkX in hierarchicalGrid.area.boundingBoxStart.chunkX - 1..hierarchicalGrid.area.boundingBoxEnd.chunkX + 1 &&
+                    chunkZ in hierarchicalGrid.area.boundingBoxStart.chunkZ - 1..hierarchicalGrid.area.boundingBoxEnd.chunkZ + 1
 
         @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
         fun onBreak(event: BlockBreakEvent) {
@@ -1686,6 +1724,16 @@ internal class PathfindingManager {
             if (!isChunkInsideArea(chunk.x, chunk.z)) return
 
             requestChunkRebuild(chunk.x, chunk.z, event.world)
+        }
+
+        @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+        fun onChunkUnload(event: ChunkUnloadEvent) {
+            val chunk = event.chunk
+            if (!isChunkInsideArea(chunk.x, chunk.z)) return
+
+            later {
+                requestChunkRebuild(chunk.x, chunk.z, event.world)
+            }
         }
     }
 }
