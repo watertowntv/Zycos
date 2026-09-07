@@ -233,4 +233,18 @@ object MobPathfindingManager {
         val gridIdentifier: String,
         val navigator: PathfindingManager.HierarchicalNavigator
     )
+
+    data class MobPathfindingProfile(
+        val mobHeight: Int = 2,
+        val mobWidth: Double = 0.6,
+        val maxStepUp: Int = 1,
+        val maxStepDown: Int = 3
+    ) {
+        init {
+            require(mobHeight > 0)
+            require(mobWidth.isFinite() && mobWidth > 0.0)
+            require(maxStepUp >= 0)
+            require(maxStepDown >= 0)
+        }
+    }
 }

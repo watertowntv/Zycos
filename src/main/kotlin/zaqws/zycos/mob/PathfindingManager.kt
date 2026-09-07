@@ -39,6 +39,7 @@ import zaqws.zycos.distanceSquared2D
 import zaqws.zycos.fastRemoveIf
 import zaqws.zycos.later
 import zaqws.zycos.toPosition
+import zaqws.zycos.mob.MobPathfindingManager.MobPathfindingProfile
 import java.util.PriorityQueue
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
@@ -49,19 +50,6 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.time.Duration.Companion.milliseconds
 
-data class MobPathfindingProfile(
-    val mobHeight: Int = 2,
-    val mobWidth: Double = 0.6,
-    val maxStepUp: Int = 1,
-    val maxStepDown: Int = 3
-) {
-    init {
-        require(mobHeight > 0)
-        require(mobWidth.isFinite() && mobWidth > 0.0)
-        require(maxStepUp >= 0)
-        require(maxStepDown >= 0)
-    }
-}
 
 internal class PathfindingManager {
     companion object {
