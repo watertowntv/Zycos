@@ -2,6 +2,7 @@
 
 package zaqws.zycos.mob
 
+import com.destroystokyo.paper.entity.Pathfinder
 import it.unimi.dsi.fastutil.longs.Long2DoubleOpenHashMap
 import it.unimi.dsi.fastutil.longs.Long2LongOpenHashMap
 import it.unimi.dsi.fastutil.longs.Long2ObjectMap
@@ -1278,6 +1279,9 @@ internal class PathfindingManager {
             const val TARGET_REUSE_DISTANCE_SQUARED = TARGET_REUSE_DISTANCE * TARGET_REUSE_DISTANCE
             const val WAYPOINT_REACHED_DISTANCE = 0.8
             const val WAYPOINT_REACHED_DISTANCE_SQUARED = WAYPOINT_REACHED_DISTANCE * WAYPOINT_REACHED_DISTANCE
+            const val MOVE_TARGET_LOOKAHEAD_NODES = 4
+            const val MOVE_START_MAXIMUM_FAILURES = 5
+            const val MOVE_RETRY_DELAY_MILLISECONDS = 100L
             const val FAILURE_RETRY_DELAY_MILLISECONDS = 1000L
             const val NAVIGATION_TICK_MILLISECONDS = 50L
             const val STUCK_TIMEOUT_NANOSECONDS = 10_000_000_000L
@@ -1293,11 +1297,14 @@ internal class PathfindingManager {
         private var localPath: LongArray? = null
         private var macroIndex = 0
         private var localIndex = 0
+        private var activeMoveTargetIndex = -1
         private var searchJob: Job? = null
         private var localSearchJob: Job? = null
         private var navigationJob: Job? = null
         private var lastTargetLocation: Location? = null
         private var lastFailureTime = 0L
+        private var nextMoveAttemptTime = 0L
+        private var moveStartFailureCount = 0
         private var requestGeneration = 0L
         private var lastProgressLocation = entity.location
         private var lastProgressTime = System.nanoTime()
@@ -1457,12 +1464,14 @@ internal class PathfindingManager {
                         macroIndex++
                         localPath = null
                         localIndex = 0
+                        activeMoveTargetIndex = -1
                         navigateTo(lastTargetLocation ?: return@withContext)
                         return@withContext
                     }
 
                     localPath = generatedPath
                     localIndex = 1
+                    activeMoveTargetIndex = -1
                     lastProgressLocation = entity.location
                     lastProgressTime = System.nanoTime()
                     triggerMove()
@@ -1474,18 +1483,22 @@ internal class PathfindingManager {
             val activeLocalPath = localPath ?: return
             if (localIndex >= activeLocalPath.size) return
 
-            val targetNodePosition = AreaManager.Position(activeLocalPath[localIndex])
+            val targetIndex = activeMoveTargetIndex.takeIf { it in localIndex until activeLocalPath.size } ?: localIndex
+            val targetNodePosition = AreaManager.Position(activeLocalPath[targetIndex])
             val targetNodeCenter = targetNodePosition
                 .toLocation(entity.world)
                 .add(0.5, 0.0, 0.5)
 
             if (entity.location.distanceSquared2D(targetNodeCenter) >= WAYPOINT_REACHED_DISTANCE_SQUARED ||
-                abs(entity.location.y - targetNodePosition.y) >= 0.5
+                entity.location.blockY != targetNodePosition.y
             ) {
                 return
             }
 
-            localIndex++
+            localIndex = targetIndex + 1
+            activeMoveTargetIndex = -1
+            nextMoveAttemptTime = 0L
+            moveStartFailureCount = 0
 
             if (localIndex < activeLocalPath.size) {
                 triggerMove()
@@ -1518,15 +1531,50 @@ internal class PathfindingManager {
             val activeLocalPath = localPath ?: return
             if (localIndex >= activeLocalPath.size) return
 
-            val nextNodeLocation = AreaManager.Position(activeLocalPath[localIndex])
-                .toLocation(entity.world)
-                .add(0.5, 0.0, 0.5)
+            val currentTime = System.nanoTime()
+            if (currentTime < nextMoveAttemptTime) return
 
-            if (!entity.world.isChunkLoaded(nextNodeLocation.blockX shr Constants.CHUNK_SHIFT, nextNodeLocation.blockZ shr Constants.CHUNK_SHIFT) ||
-                !entity.pathfinder.moveTo(nextNodeLocation, speed)
-            ) {
-                registerFailure()
+            val preferredTargetIndex = min(localIndex + MOVE_TARGET_LOOKAHEAD_NODES, activeLocalPath.lastIndex)
+            var selectedPath: Pathfinder.PathResult? = null
+            var selectedTargetIndex = -1
+
+            for (candidateIndex in preferredTargetIndex downTo localIndex) {
+                val candidatePosition = AreaManager.Position(activeLocalPath[candidateIndex])
+                if (!entity.world.isChunkLoaded(candidatePosition.chunkX, candidatePosition.chunkZ)) continue
+
+                val candidateLocation = candidatePosition
+                    .toLocation(entity.world)
+                    .add(0.5, 0.0, 0.5)
+                val candidatePath = entity.pathfinder.findPath(candidateLocation) ?: continue
+                if (!candidatePath.canReachFinalPoint()) continue
+                if (candidatePath.points.any { it.toPosition() !in hierarchicalGrid.area }) continue
+                val finalPoint = candidatePath.finalPoint ?: continue
+
+                if (finalPoint.blockX != candidatePosition.x ||
+                    finalPoint.blockY != candidatePosition.y ||
+                    finalPoint.blockZ != candidatePosition.z
+                ) continue
+
+                selectedPath = candidatePath
+                selectedTargetIndex = candidateIndex
+                break
             }
+
+            if (selectedPath != null && entity.pathfinder.moveTo(selectedPath, speed)) {
+                activeMoveTargetIndex = selectedTargetIndex
+                nextMoveAttemptTime = 0L
+                moveStartFailureCount = 0
+                return
+            }
+
+            activeMoveTargetIndex = -1
+            moveStartFailureCount++
+            if (moveStartFailureCount >= MOVE_START_MAXIMUM_FAILURES) {
+                registerFailure()
+                return
+            }
+
+            nextMoveAttemptTime = currentTime + MOVE_RETRY_DELAY_MILLISECONDS * 1_000_000L
         }
 
         private fun requestPathAsync(
@@ -1548,6 +1596,9 @@ internal class PathfindingManager {
             localPath = null
             macroIndex = 0
             localIndex = 0
+            activeMoveTargetIndex = -1
+            nextMoveAttemptTime = 0L
+            moveStartFailureCount = 0
 
             val snapshots = Long2ObjectOpenHashMap<ChunkSnapshot>(18)
             snapshots.putAll(
@@ -1598,6 +1649,7 @@ internal class PathfindingManager {
                     macroIndex = 0
                     localPath = null
                     localIndex = 0
+                    activeMoveTargetIndex = -1
                     navigateTo(lastTargetLocation ?: return@withContext)
                 }
             }
@@ -1608,6 +1660,9 @@ internal class PathfindingManager {
             lastFailureTime = System.nanoTime()
             macroPath = null
             localPath = null
+            activeMoveTargetIndex = -1
+            nextMoveAttemptTime = 0L
+            moveStartFailureCount = 0
             entity.pathfinder.stopPathfinding()
         }
 
@@ -1626,8 +1681,11 @@ internal class PathfindingManager {
             localPath = null
             macroIndex = 0
             localIndex = 0
+            activeMoveTargetIndex = -1
             lastTargetLocation = null
             failed = false
+            nextMoveAttemptTime = 0L
+            moveStartFailureCount = 0
             entity.pathfinder.stopPathfinding()
         }
     }
