@@ -7,7 +7,7 @@ import org.bukkit.Bukkit
 import org.bukkit.Location
 import org.bukkit.World
 import org.bukkit.entity.Mob
-import org.bukkit.event.HandlerList
+import org.bukkit.scheduler.BukkitTask
 import zaqws.zycos.AreaManager
 import zaqws.zycos.CoroutineManager.mainDispatcher
 import zaqws.zycos.CoroutineManager.scope
@@ -15,16 +15,29 @@ import zaqws.zycos.Main
 import java.util.*
 
 object MobPathfindingManager {
+    private const val NAVIGATION_LEASE_TICKS = 3L
+    private const val NO_NAVIGATION_REFRESH_TICK = Long.MIN_VALUE
+
     private val gridRegistry = PathfindingManager.GridRegistry()
     private val grids = HashMap<String, GridContext>()
     private val mobs = HashMap<UUID, MobContext>()
 
     private var initialized = false
+    private var navigationTask: BukkitTask? = null
+    private var navigationTick = 0L
 
     internal fun register() {
         checkMainThread()
+        if (initialized) return
 
         initialized = true
+        navigationTick = 0L
+        navigationTask = Bukkit.getScheduler().runTaskTimer(
+            Main.plugin,
+            Runnable { tickNavigators() },
+            1L,
+            1L
+        )
     }
 
     internal fun unregister() {
@@ -32,19 +45,23 @@ object MobPathfindingManager {
 
         checkMainThread()
 
-        for ((_, navigator) in mobs.values) {
+        navigationTask?.cancel()
+        navigationTask = null
+
+        for ((_, _, navigator) in mobs.values) {
             navigator.cancel()
         }
 
         mobs.clear()
 
         for ((_, grid, listener) in grids.values) {
-            HandlerList.unregisterAll(listener)
+            listener.unregister()
             grid.clear()
         }
 
         grids.clear()
         gridRegistry.clear()
+        navigationTick = 0L
 
         initialized = false
     }
@@ -60,9 +77,8 @@ object MobPathfindingManager {
             "Grid identifier cannot be blank."
         }
 
-        unregisterGrid(identifier)
-
         val grid = withContext(Main.plugin.mainDispatcher) {
+            unregisterGrid(identifier)
             gridRegistry.registerGrid(
                 identifier,
                 area,
@@ -102,7 +118,7 @@ object MobPathfindingManager {
             }
         } catch (throwable: Throwable) {
             withContext(Main.plugin.mainDispatcher) {
-                gridRegistry.removeGrid(identifier)?.clear()
+                gridRegistry.removeGrid(identifier)
             }
 
             throw throwable
@@ -127,8 +143,8 @@ object MobPathfindingManager {
             iterator.remove()
         }
 
-        HandlerList.unregisterAll(context.listener)
-        gridRegistry.removeGrid(identifier)?.clear()
+        context.listener.unregister()
+        gridRegistry.removeGrid(identifier)
 
         return true
     }
@@ -162,8 +178,8 @@ object MobPathfindingManager {
 
         mobs[mob.uniqueId] = MobContext(
             gridIdentifier,
+            mob,
             PathfindingManager.HierarchicalNavigator(
-                plugin = Main.plugin,
                 entity = mob,
                 hierarchicalGrid = gridContext.grid,
                 scope = Main.plugin.scope,
@@ -185,6 +201,43 @@ object MobPathfindingManager {
         mob: Mob,
         target: Location,
         speed: Double = 1.0
+    ): Boolean = navigate(
+        mob,
+        target,
+        speed,
+        NavigationRequestMode.LEASED
+    )
+
+    fun navigatePersistentlyTo(
+        mob: Mob,
+        target: Location,
+        speed: Double = 1.0
+    ): Boolean = navigate(
+        mob,
+        target,
+        speed,
+        NavigationRequestMode.PERSISTENT
+    )
+
+    fun stop(mob: Mob): Boolean {
+        checkMainThread()
+
+        val context = mobs[mob.uniqueId] ?: return false
+        clearNavigationRequest(context)
+        context.navigator.cancel()
+
+        return true
+    }
+
+    fun hasGrid(identifier: String): Boolean = identifier in grids
+    fun isRegistered(mob: Mob): Boolean = mob.uniqueId in mobs
+
+
+    private fun navigate(
+        mob: Mob,
+        target: Location,
+        speed: Double,
+        requestMode: NavigationRequestMode
     ): Boolean {
         checkMainThread()
 
@@ -198,23 +251,44 @@ object MobPathfindingManager {
             return false
         }
 
+        context.requestMode = requestMode
+        context.lastNavigationRefreshTick = navigationTick
         context.navigator.speed = speed
         context.navigator.navigateTo(target)
 
         return true
     }
 
-    fun stop(mob: Mob): Boolean {
-        checkMainThread()
+    private fun tickNavigators() {
+        navigationTick++
 
-        val context = mobs[mob.uniqueId] ?: return false
-        context.navigator.cancel()
+        val iterator = mobs.entries.iterator()
+        while (iterator.hasNext()) {
+            val context = iterator.next().value
+            if (!context.mob.isValid || context.mob.isDead) {
+                context.navigator.cancel()
+                iterator.remove()
+                continue
+            }
 
-        return true
+            if (context.requestMode == NavigationRequestMode.LEASED &&
+                navigationTick - context.lastNavigationRefreshTick > NAVIGATION_LEASE_TICKS
+            ) {
+                clearNavigationRequest(context)
+                context.navigator.cancel()
+                continue
+            }
+
+            if (context.requestMode != NavigationRequestMode.NONE) {
+                context.navigator.tick()
+            }
+        }
     }
 
-    fun hasGrid(identifier: String): Boolean = identifier in grids
-    fun isRegistered(mob: Mob): Boolean = mob.uniqueId in mobs
+    private fun clearNavigationRequest(context: MobContext) {
+        context.requestMode = NavigationRequestMode.NONE
+        context.lastNavigationRefreshTick = NO_NAVIGATION_REFRESH_TICK
+    }
 
     private fun checkMainThread() {
         check(Bukkit.isPrimaryThread()) {
@@ -229,9 +303,18 @@ object MobPathfindingManager {
         val listener: PathfindingManager.PathfindingUpdateListener
     )
 
+    private enum class NavigationRequestMode {
+        NONE,
+        LEASED,
+        PERSISTENT
+    }
+
     private data class MobContext(
         val gridIdentifier: String,
-        val navigator: PathfindingManager.HierarchicalNavigator
+        val mob: Mob,
+        val navigator: PathfindingManager.HierarchicalNavigator,
+        var requestMode: NavigationRequestMode = NavigationRequestMode.NONE,
+        var lastNavigationRefreshTick: Long = NO_NAVIGATION_REFRESH_TICK
     )
 
     data class MobPathfindingProfile(
