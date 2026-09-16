@@ -35,6 +35,7 @@ import org.bukkit.inventory.EquipmentSlot
 import org.bukkit.inventory.ItemStack
 import org.bukkit.util.Vector
 
+
 object ClientEntityManager : Listener {
     private val entityMap = Int2ObjectOpenHashMap<ClientEntity>()
 
