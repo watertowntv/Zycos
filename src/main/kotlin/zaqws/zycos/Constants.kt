@@ -17,6 +17,7 @@ val onlinePlayers: ArrayList<Player>
     get() = OnlinePlayerManager.players
 val miniMessage = MiniMessage.miniMessage()
 
+
 object Constants {
     const val EPSILON = 1e-8
     const val CHUNK_SHIFT = 4
